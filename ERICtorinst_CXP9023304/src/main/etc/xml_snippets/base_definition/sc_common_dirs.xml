@@ -1,0 +1,77 @@
+<litp:component-def id="sc_common_dirs">
+    <!-- directories to be created on sc nodes alogn with permissions settings -->
+      <litp:file-def id="sso_certs">
+            <ensure>directory</ensure>
+			<group>litp_jboss</group>
+            <path>/ericsson/tor/data/certificates</path>
+            <recurse>true</recurse>
+            <source>puppet:///modules/cmw/certificates</source>
+        </litp:file-def>
+        <litp:file-def id="global_propertiess">
+            <ensure>file</ensure>
+            <path>/ericsson/tor/data/global.properties</path>
+            <source>puppet:///modules/cmw/global.properties</source>
+        </litp:file-def>
+        <litp:file-def id="upgrade_dir">
+            <ensure>directory</ensure>
+            <owner>litp_admin</owner>
+            <path>/cluster/upgrade</path>
+            <recurse>false</recurse>
+        </litp:file-def>
+    <litp:file-def id="pms_seg_data_dir">
+        <ensure>directory</ensure>
+        <group>litp_jboss</group>
+        <owner>litp_jboss</owner>
+        <path>/var/opt/ericsson/nms_umts_pms_seg/data</path>
+        <recurse>true</recurse>
+    </litp:file-def>
+	<litp:file-def id="logstash_dir">
+		<ensure>directory</ensure>
+        <group>litp_jboss</group>
+		<mode>744</mode>
+        <owner>logstash_user</owner>
+        <path>/ericsson/tor/logstash/elasticsearch</path>
+        <recurse>false</recurse>
+    </litp:file-def>
+	<litp:file-def id="litp_jboss_lib_parent">
+        <ensure>directory</ensure>
+        <group>litp_jboss</group>
+	    <owner>litp_jboss</owner>
+        <path>/var/lib/litp</path>
+    </litp:file-def>
+	<litp:file-def id="litp_jboss_lib">
+        <ensure>directory</ensure>
+        <group>litp_jboss</group>
+	    <owner>litp_jboss</owner>
+        <path>/var/lib/litp/litp_jboss</path>
+        <recurse>true</recurse>
+    </litp:file-def>
+	<litp:file-def id="presentation_server">
+        <ensure>directory</ensure>
+        <group>litp_jboss</group>
+        <owner>litp_jboss</owner> 
+        <path>/ericsson/tor/data/presentation_server</path>
+        <recurse>true</recurse>
+    </litp:file-def>
+    <litp:file-def id="sso_no_rollback">
+        <ensure>directory</ensure>
+        <group>litp_jboss</group>
+        <owner>litp_jboss</owner>
+        <path>/ericsson/tor/no_rollback/sso</path>
+        <recurse>true</recurse>
+    </litp:file-def>
+    <litp:file-def id="sso_backup">
+        <ensure>directory</ensure>
+        <group>litp_jboss</group>
+        <owner>litp_jboss</owner>
+        <path>/ericsson/tor/no_rollback/sso/backup</path>
+        <recurse>true</recurse>
+    </litp:file-def>
+    <litp:file-def id="sso_config_dump">
+        <ensure>directory</ensure>
+        <group>litp_jboss</group>
+        <owner>litp_jboss</owner>
+        <path>/ericsson/tor/no_rollback/sso/config</path>
+        <recurse>true</recurse>
+    </litp:file-def>
+</litp:component-def>

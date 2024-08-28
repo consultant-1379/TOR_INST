@@ -1,0 +1,59 @@
+<litp:component-def id="jee_containers">
+ <litp:component-def id="jee_MCUI">
+    <name>jee_MCUI</name>
+    <version>1.0.0</version>
+    <litp:package-def id="rpm">
+      <ensure>installed</ensure>
+      <name>ERICjbosstemp_CXP9030293</name>
+	  <repository/>
+	  <version>%{Version}</version>
+    </litp:package-def>
+    <litp:jee-container-def id="instance">
+      <MaxPermSize>512M</MaxPermSize>
+      <Xms>6144M</Xms>
+      <Xmx>6144M</Xmx>
+      <command-line-options>-Djgroups.ipmcast.prefix=FF02:: -Djgroups.uuid_cache.max_age=5000 --server-config=standalone-core.xml -Dcom.sun.management.jmxremote</command-line-options>
+      <data-dir>/var/ericsson/{rdni}/data</data-dir>
+      <default-multicast>234.12.54.8</default-multicast>
+      <home-dir>/home/jboss/{rdni}</home-dir>
+      <install-source>/opt/ericsson/nms/jboss/jboss-eap-ericsson-6.0.tgz</install-source>
+      <instance-name>{rdni}</instance-name>
+      <internal-listener>{ip.address}</internal-listener>
+      <jgroups-bind-addr>{ip.address}</jgroups-bind-addr>
+      <jgroups-mping-mcast-addr>234.1.31.127</jgroups-mping-mcast-addr>
+      <jgroups-mping-mcast-port>45100</jgroups-mping-mcast-port>
+      <log-dir>/var/ericsson/log/jboss/{rdni}</log-dir>
+      <management-listener>{ip.address}</management-listener>
+      <management-user>root</management-user>
+      <messaging-group-address>234.12.54.8</messaging-group-address>
+      <messaging-group-port>12100</messaging-group-port>
+      <name>jboss_MCUI</name>
+      <process-group>litp_jboss</process-group>
+      <process-user>litp_jboss</process-user>
+      <public-listener>{ip.address}</public-listener>
+      <public-port-base>8080</public-port-base>
+      <version>1.0.0</version>
+      <litp:jee-property-def id="ENM_Multicast_ADDR">
+        <property>-Denm.udp.mcast_addr</property>
+        <value>234.1.31.127</value>
+      </litp:jee-property-def>
+      <litp:jee-property-def id="ENM_Multicast_PORT">
+        <property>-Denm.udp.mcast_port</property>
+        <value>45103</value>
+      </litp:jee-property-def>
+      <litp:ip-address-def id="ip"/>
+      <litp:jee-property-def id="gcInterval">
+        <property>-Dsun.rmi.dgc.server.gcInterval</property>
+        <value>300</value>
+      </litp:jee-property-def>
+      <litp:jee-property-def id="logPerDeployment">
+        <property>-Dorg.jboss.as.logging.per-deployment</property>
+        <value>false</value>
+      </litp:jee-property-def>
+      <litp:jee-property-def id="tracinAutoAnnotate">
+        <property>-Dcom.ericsson.oss.sdk.tracing.autoannotate</property>
+        <value>off</value>
+      </litp:jee-property-def>
+    </litp:jee-container-def>
+  </litp:component-def>
+ </litp:component-def>

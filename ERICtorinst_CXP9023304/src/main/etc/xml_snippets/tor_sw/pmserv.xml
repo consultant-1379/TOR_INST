@@ -1,0 +1,37 @@
+<tor_sw>
+  <litp:component-def id="pmserv">
+    <litp:deployable-entity-def id="de">
+      <app-type/>
+      <install-source/>
+      <name/>
+      <service>jboss_FMPMServ</service>
+      <version/>
+      <litp:jms-queue-def id="jms_cli_cons_q">
+        <jndi>EventBasedMediationClient</jndi>
+        <name>queue/MediationClientConsumerQueue,java:jboss/exported/jms/queue/MediationClientConsumerQueue</name>
+      </litp:jms-queue-def>
+      <litp:jms-topic-def id="jms_task_err_handler_t">
+        <jndi>MediationTaskErrorHandler</jndi>
+        <name>topic/MediationTaskErrorTopic,java:jboss/exported/jms/topic/MediationTaskErrorTopic</name>
+      </litp:jms-topic-def>
+      <litp:jms-queue-def id="jms_fil_col_resp_q">
+        <jndi>FileCollectionResponseQueue</jndi>
+        <name>queue/FileCollectionResponseQueue,java:jboss/exported/jms/queue/FileCollectionResponseQueue</name>
+      </litp:jms-queue-def>
+      <litp:jms-queue-def id="jms_res_q">
+        <jndi>MediationResponseResultHandler</jndi>
+        <name>queue/MediationResponseQueue,java:jboss/exported/jms/queue/MediationResponseQueue</name>
+      </litp:jms-queue-def>
+      <litp:jms-queue-def id="jms_fail_q">
+        <jndi>MediationFailureResponseResultHandler</jndi>
+        <name>queue/MediationFailureResponseQueue,java:jboss/exported/jms/queue/MediationFailureResponseQueue</name>
+      </litp:jms-queue-def>
+    </litp:deployable-entity-def>
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICpmservice_CXP9030101</name>
+	  <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

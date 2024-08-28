@@ -1,0 +1,1339 @@
+#Filter
+SSD_ALIAS_KEY_FILTER="^alias_.*="
+
+#setting up flag options
+
+
+usage()
+{
+  ${ECHO} "$0 --site_data <site_data> --sw_base <tor_iso>"
+    ${ECHO} " Where <site_data> is the TOR Site Specific Data file"
+    ${ECHO} " Where <tor_iso> is the TOR Sw ISO or a directory containing the TOR Sw Packages"
+}
+
+#by default it is multiblade installation
+SINGLE_BLADE=0
+
+#
+# Helper function for debugging purpose.
+# ----------------------------------------
+# Reduces the clutter on the script's output while saving everything in
+# landscape.log file in the user's current directory. Can safely be removed
+# if not needed.
+get_absolute_path()
+{
+  _dir_=`${DIRNAME} $0`
+  SCRIPT_HOME=`cd ${_dir_}/../ 2>/dev/null && pwd || ${ECHO} ${_dir_}`
+}
+
+
+# Define some global network related stuff
+# The general TOR VLAN name
+TOR_SERVICES_NETWORK="TORservices"
+TOR_SERVICES_SUBNET="%%TORservices_subnet%% "
+TOR_SERVICES_GATEWAY="%%TORservices_gateway%%"
+TOR_GATEWAY_IPV6="%%TORservices_IPv6gateway%%"
+# The storage vlan name
+# The backup vlan name
+TOR_STORAGE_NETWORK="storage"
+TOR_STORAGE_SUBNET="%%storage_subnet%%"
+# The backup vlan name
+TOR_BACKUP_NETWORK="backup"
+TOR_BACKUP_SUBNET="%%backup_subnet%%"
+# The IP pool to use for TORservices IP addresses
+
+TOR_SERVICE_POOL="litp_services_pool"
+# The IP pool to use for storage IP addresses
+TOR_STORAGE_POOL="storage_pool"
+# The IP pool to use for backup IP addresses
+TOR_BACKUP_POOL="backup_pool"
+# The IP pool containing JBoss IP addresses
+#TOR_JEE_POOL="litp_services_jee_pool"
+# The IP pool for IPv6
+TOR_IPv6_POOL="ipv6_pool"
+
+# List of JBoss Service Groups that need to be configured
+TOR_JEE_SERVICEGROUP_LIST=('MSFM' 'MSPM0' 'MSPM1' 'FMPMServ' 'SSO' 'UIServ' 'MedCore')
+# List of LSB services that need IP address assignment
+TOR_LSB_SERVICEGROUP_LIST=('httpd' 'logstash')
+
+# The SFS VIP used to mount the OSS segment share (This should be the same one as OSS uses to mount the segement1 fs)
+SFS_VIP_SEGMENT_1="%%nas_vip_seg1%%"
+# The SFS VIP used to mount the log file system
+SFS_VIP_CLOG="%%nas_vip_clog%%"
+# The SFS VIP used to mount any other file systems
+SFS_VIP_GENERAL="%%nas_vip_tor_1%%"
+
+
+# Define sizes for the boot and app block devices
+BOOT_DEVICE_SIZE="170G"
+APP_DEVICE_SIZE="300G"
+
+# Define sizes for logical volumes created on local storage
+# root VG
+LV_ROOT_SIZE="50G"
+LV_SWAP_SIZE="5G"
+LV_VAR_SIZE="50G"
+# app VG
+LV_ETC_ERIC_SIZE="5G"
+LV_OPT_ERIC_SIZE="20G"
+LV_VAR_ERIC_SIZE="80G"
+LV_HOME_SIZE="20G"
+LV_PMS_SEG_DATA_SIZE="1G"
+#SNAP_PERCENT
+HOME_SNAP_PERCENT="100"
+SNAP_PERCENT="40"
+LV_JBOSS_HORNETQ="1G"
+
+#This works in production but if there are multiple tor instnces sharing sfs these paths and share names as well as storage pool need to be unique
+# The CMW /cluster SFS share name
+CLUSTER_SHARE_NAME="%%tor_sfs_storage_pool%%-cluster"
+# The CMW /cluster SFS chare path
+CLUSTER_SHARE_PATH="/vx/%%tor_sfs_storage_pool%%-cluster"
+# The CMW /cluster fs SFS share size
+CLUSTER_SHARE_SIZE="20G"
+
+# The persistent application data  /tor/no_rollback SFS share name
+NO_ROLLBACK_SHARE_NAME="%%tor_sfs_storage_pool%%-no_rollback"
+# The persistent application data  /tor/no_rollback  SFS share path
+NO_ROLLBACK_SHARE_PATH="/vx/%%tor_sfs_storage_pool%%-no_rollback"
+# The persistent application data  /tor/no_rollback  fs SFS share size
+NO_ROLLBACK_SHARE_SIZE="20G"
+
+# The application data /tor data SFS share name
+DATA_SHARE_NAME="%%tor_sfs_storage_pool%%-data"
+# The application data /tor data SFS share name SFS share path
+DATA_SHARE_PATH="/vx/%%tor_sfs_storage_pool%%-data"
+# The application data /tor data SFS share name fs SFS share size
+DATA_SHARE_SIZE="20G"
+SFS_ALIAS="nasconsole"
+
+# The SFS storadm share name
+SFS_STORE_ADM_SHARE_NAME="%%tor_sfs_storage_pool%%-storadm_home"
+# The SFS filestore path for the storadm share
+SFS_STORE_ADM_SHARE_PATH="/vx/%%tor_sfs_storage_pool%%-storadm_home"
+# The storadm home SFS share size
+SFS_STORE_ADM_SHARE_SIZE="100M"
+
+# The SFS storobs share name
+SFS_STORE_OBS_SHARE_NAME="%%tor_sfs_storage_pool%%-storobs_home"
+# The SFS filestore path for the storobs share
+SFS_STORE_OBS_SHARE_PATH="/vx/%%tor_sfs_storage_pool%%-storobs_home"
+# The storobs SFS share size
+SFS_STORE_OBS_SHARE_SIZE="100M"
+
+# The OSS segment share name
+SFS_OSS_1_SEGMENT_SHARE_NAME="segment1_tor_share"
+
+# The OSS DDC DATA share name
+SFS_OSS_1_DDC_DATA_SHARE_NAME="ddc_data_tor_share"
+
+# The rsyslog SFS share name
+RSYSLOG_SHARE_NAME="%%tor_sfs_storage_pool%%-rsyslog"
+# The rsyslog SFS share path
+RSYSLOG_SHARE_PATH="/vx/%%tor_sfs_storage_pool%%-rsyslog"
+# The CMW /cluster fs SFS share size
+RSYSLOG_SHARE_SIZE="20G"
+
+# The logstash SFS share name
+LOGSTASH_SHARE_NAME="%%tor_sfs_storage_pool%%-logstash"
+# The SFS path for the logstash share
+LOGSTASH_SHARE_PATH="/vx/%%tor_sfs_storage_pool%%-logstash"
+# The logstash SFS share size
+LOGSTASH_SHARE_SIZE="500G"
+
+# The Java Heap and Core dumps SFS share name
+HCDUMPS_SHARE_NAME="%%tor_sfs_storage_pool%%-hcdumps"
+# The SFS path for the heap and core dumps share
+HCDUMPS_SHARE_PATH="/vx/%%tor_sfs_storage_pool%%-hcdumps"
+# The Heap and Core dumps SFS share size
+HCDUMPS_SHARE_SIZE="100G"
+
+#---------------------------------
+# MULTICAST ADDRESSES
+#---------------------------------
+
+DEFAULT_MCAST_TOR="%%default_multicast_tor%%"
+DEFAULT_ENM_TOR="%%enm_multicast_addr%%"
+DEFAULT_MGA_TOR="%%mga_tor%%"
+DEFAULT_JGPS_MPING_TOR="%%jgroups_mping_tor%%"
+
+DEFAULT_MCAST_SSO="%%default_multicast_sso%%"
+DEFAULT_ENM_SSO="%%enm_multicast_sso%%"
+DEFAULT_MGA_SSO="%%mga_sso%%"
+DEFAULT_JGPS_MPING_SSO="%%jgroups_mping_sso%%"
+
+IPV6_MULTICAST=$(printf "::%x%02x:%x%02x\n" ` echo ${DEFAULT_ENM_TOR}|tr . " "`)
+
+###################################
+#Apache FQDN
+###################################
+APACHE_FQDN="%%httpd_fqdn%%"
+#-----------------------------------------------
+#Inventory Functions
+#----------------------------------------------
+
+modify()
+{
+  litp $1/instance update default-multicast=${2}
+  litp $1/instance/ENM_Multicast_ADDR update value=${3}
+  litp $1/instance update messaging-group-address=${4}
+  litp $1/instance update jgroups-mping-mcast-addr=${5}
+}
+
+modify_jee_FMPMMS()
+{
+  modify "$1" ${DEFAULT_MCAST_TOR} ${DEFAULT_ENM_TOR} \
+    ${DEFAULT_MGA_TOR} ${DEFAULT_JGPS_MPING_TOR}
+}
+
+modify_jee_FMPMServ()
+{
+  modify "$1" ${DEFAULT_MCAST_TOR} ${DEFAULT_ENM_TOR} \
+    ${DEFAULT_MGA_TOR} ${DEFAULT_JGPS_MPING_TOR}
+}
+
+modify_jee_MCUI()
+{
+  modify "$1" ${DEFAULT_MCAST_TOR} ${DEFAULT_ENM_TOR} \
+    ${DEFAULT_MGA_TOR} ${DEFAULT_JGPS_MPING_TOR}
+}
+
+modify_jee_SSO()
+{
+  modify "$1" ${DEFAULT_MCAST_SSO} ${DEFAULT_ENM_SSO} \
+    ${DEFAULT_MGA_SSO} ${DEFAULT_JGPS_MPING_SSO}
+}
+
+#UPDATE MULTICAST CONTAINERS
+update_multicast_containers()
+{
+for _jee_ in `${LITP} /definition/jee_containers/ find --names jee_.*` ; do
+  _jtype_=`${LITP} ${_jee_} show properties | ${GREP} "name: " | ${AWK} -F\" '{print $2}'`
+  type -t modify_${_jtype_} > /dev/null 2>&1
+  if [ $? -eq 0 ] ; then
+    modify_${_jtype_} ${_jee_}
+  else
+    echo "No type function for ${_jtype_}"
+  fi
+done
+}
+
+### Function: discover_enclosure ###
+#
+#   Create and discover blades in a chassis
+#
+# Arguments:
+#       $1 - The enclosure name to crate
+#       $2 - The OAIP1 IP Address
+#       $3 - The OAIP2 IP Address
+#       $4 - The OA username
+#       $5 - The OA password
+#
+# Return Values:
+#       None - No return value
+#
+#
+discover_enclosure()
+{
+  _enc_name_=$1
+  _ip1_=$2
+  _ip2_=$3
+  _user_=$4
+  _pass_=$5
+  _systems_=/inventory/deployment1/systems
+  ${LITP} ${_systems_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    # Create systems path
+    litp ${_systems_} create generic-system-pool
+  fi
+  _encpath_=${_systems_}/${_enc_name_}
+  ${LITP} ${_encpath_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    litp ${_encpath_} create hp-c7000-enclosure
+  fi
+  # password is quoted to allow space characters in the password
+  litp ${_encpath_} update OAIP1=${_ip1_} OAIP2=${_ip2_} \
+    username=${_user_} password="${_pass_}"  
+  litp ${_encpath_} discover
+}
+
+### Function: get_serial_path ###
+#
+#   Find the enclosure path a blade exists under. Echoes the path to stdout
+#
+# Arguments:
+#       $1 - enclosure_1 path
+#       $2 - enclosure_2 path
+#       $3 - The blades serial ID
+#
+# Return Values:
+#       0 - If the serial was found
+#       1 - If the serial was not found under enclosure1|enclosure2
+#
+#
+get_serial_path()
+{
+  _enc1_path_=$1
+  _enc2_path_=$2
+  _serial_=$3
+  ${LITP} ${_enc1_path_}/${_serial_} show > /dev/null 2>&1
+  if [ $? -eq 0 ] ; then
+    ${ECHO} "${_enc1_path_}/${_serial_}"
+    return 0
+  else
+    ${LITP} ${_enc2_path_}/${_serial_} show > /dev/null 2>&1
+    if [ $? -eq 0 ] ; then
+      ${ECHO} "${_enc2_path_}/${_serial_}"
+      return 0
+    else
+      ${ECHO} "Could not find serial %%node1_serial%% in enclosure1 or enclosure2"
+      return 1
+    fi
+  fi
+}
+
+### Function: discover_blades_from_ilo ###
+#
+#   Initialise the landscape system entries for the 2 blades
+#   (via iLO and blade serial ID's)
+#
+# Arguments:
+#       None
+#
+# Return Values:
+#       None
+#
+#
+discover_blades_from_ilo()
+{
+  local _enc1_aoip1_="%%enclosure1_OAIP1%%"
+  local _enc1_aoip2_="%%enclosure1_OAIP2%%"
+  local _enc1_user_="%%enclosure1_username%%"
+  local _enc1_pass_="%%enclosure1_password%%"
+  local _enc2_aoip1_="%%enclosure2_OAIP1%%"
+  local _enc2_aoip2_="%%enclosure2_OAIP2%%"
+  local _enc2_user_="%%enclosure2_username%%"
+  local _enc2_pass_="%%enclosure2_password%%"
+
+  local _serial_node1_="%%node1_serial%%"
+  local _serial_node2_="%%node2_serial%%"
+  _enclist_=( "enclosure1" "enclosure2" )
+
+  _desc_enc2_=0
+  if [ "${_enc2_aoip1_}" != "" ] ; then
+    _desc_enc2_=1
+  fi
+
+
+  # Discover all the blades in the the first enclosure
+  discover_enclosure "enclosure1" "${_enc1_aoip1_}" "${_enc1_aoip2_}" \
+    "${_enc1_user_}" "${_enc1_pass_}"
+  # If the second enclosure is defined, discover that too
+  if [ ${_desc_enc2_} -eq 1 ] ; then
+    discover_enclosure "enclosure2" "${_enc2_aoip1_}" "${_enc2_aoip2_}" \
+      "${_enc2_user_}" "${_enc2_pass_}"
+  else
+    ${ECHO} "Skipping enclosure2 discovery as no AO IP info available."
+  fi
+
+  if [ ${_desc_enc2_} -eq 0 ] ; then
+    # Only one enclosure so we can set the paths directly
+    NODE1_ENC_PATH="/inventory/deployment1/systems/enclosure1/${_serial_node1_}"
+    NODE2_ENC_PATH="/inventory/deployment1/systems/enclosure1/${_serial_node2_}"
+  else
+    # Find the enclosure the blade serials exist under
+    NODE1_ENC_PATH=`get_serial_path "/inventory/deployment1/systems/enclosure1" \
+      "/inventory/deployment1/systems/enclosure2" "${_serial_node1_}"`
+    if [ $? -ne 0 ] ; then
+      ${ECHO} "${NODE1_ENC_PATH}"
+      exit 1
+    fi
+    NODE2_ENC_PATH=`get_serial_path "/inventory/deployment1/systems/enclosure1" \
+      "/inventory/deployment1/systems/enclosure2" "${_serial_node2_}"`
+    if [ $? -ne 0 ] ; then
+      ${ECHO} "${NODE2_ENC_PATH}"
+      exit 1
+    fi
+  fi
+  # We now know the paths to node1 and node2 so we can delete the rest
+  for _enclosure_ in ${_enclist_[*]} ; do
+    _encpath_=/inventory/deployment1/systems/${_enclosure_}
+    # Check if the enclosure is defined, if not just skip it...
+    ${LITP} ${_encpath_} show > /dev/null 2>&1
+    _rc_=$?
+    if [ ${_rc_} -eq 0 ] ; then
+      for _bid_ in `${LITP} ${_encpath_} show -l | ${GREP} -vE "${_serial_node1_}|${_serial_node2_}"` ; do
+        litp ${_encpath_}/${_bid_} delete
+      done
+    fi
+  done
+  # there should only be 2 serial ids now..
+  ${ECHO} "Node 1 path is ${NODE1_ENC_PATH}"
+  ${ECHO} "Node 2 path is ${NODE2_ENC_PATH}"
+
+  # We enable the blade for MS-1 early to secure that it is allocated for that
+  # role. We provide the false login info for iLO to avoid being reboot by
+  # landscape.
+  litp /inventory/deployment1/systems/LMS create generic-system \
+    macaddress="%%LMS_macaddress%%" \
+    hostname="%%LMS_hostname%%" domain="%%LMS_domain%%"
+  litp /inventory/deployment1/systems/LMS enable
+  litp /inventory/deployment1/ms1/ms_node/os/system update domain="%%LMS_domain%%"
+
+  # Set the blades iLO login info
+  litp ${NODE1_ENC_PATH} update \
+    domain="%%node1_domain%%" iloUsername="%%node1_iloUsername%%" \
+    iloPassword="%%node1_iloPassword%%"
+  litp ${NODE2_ENC_PATH} update \
+    domain="%%node2_domain%%" iloUsername="%%node2_iloUsername%%" \
+    iloPassword="%%node2_iloPassword%%"
+}
+
+### Function: update_resolv_conf ###
+#
+#   Update the resolv.conf for each node
+#
+# Arguments:
+#       $1 - Landscape path to create/update
+#       $2 - nameserverA
+#       $3 - nameserverB
+#       $4 - DNS search domain chain
+#
+# Return Values:
+#       None
+#
+update_resolv_conf()
+{
+  _path_=$1
+  _ns1_=$2
+  _ns2_=$3
+  _search_=$4
+  create_path ${_path_} resolver
+  litp ${_path_} update nameserverA=${_ns1_} nameserverB=${_ns2_}
+  litp ${_path_} update search=${_search_}
+}
+
+
+
+
+#
+### Function: assign_service_groups ###
+#
+#Function to assign Service Groups as per site engineering document
+#need to split out LSB services
+#
+# Arguments:
+#       $1 - Array of JEE Service Group Types
+#
+#
+# Return Values:
+#       None
+#
+assign_service_groups()
+{
+_jee_list_=($*)
+if [ ! ${BASE_DEF_ONLY} ]; then
+  for _sg_ in ${_jee_list_[*]} ; do
+    for _su_ in `${LITP} /inventory/deployment1/cluster1/${_sg_} show -l | ${GREP} -v pib_notification` ; do
+      local _su_instance_=${_sg_}_${_su_}
+      local _su_instance_path_=/inventory/deployment1/cluster1/${_sg_}/${_su_}/jee/instance
+	 local _address_
+	  _address_=`get_sitedata_value ${SSD} ${_su_instance_}_ipaddress`
+	  local _hostname_
+	  _hostname_=`get_sitedata_value ${SSD} ${_su_instance_}_hostname`
+	  if [ $? -ne 0 ] ; then
+		${ECHO} "Error ${_address_}"
+		exit 1
+	  fi
+     litp ${_su_instance_path_}/ip update address=${_address_}
+     litp ${_su_instance_path_}/ip update gateway=${TOR_SERVICES_GATEWAY}
+     litp ${_su_instance_path_}/ip update subnet=${TOR_SERVICES_SUBNET}
+     litp ${_su_instance_path_}/ip update net_name=${TOR_SERVICES_NETWORK}
+      # Allocate the address
+      litp ${_su_instance_path_}/ip allocate
+      #Alias
+	  # strip underscores from service unit
+	  local _su_alias_=`echo ${_su_} | ${SED} s/_/-/g`
+
+      litp ${_su_instance_path_}/ update jgroups-bind-addr=${_address_}
+
+      if [ ${_sg_} == "SSO" -a ${_su_} == "su_0" ]; then
+        litp /inventory/deployment1/cluster1/sc1/alias_${_su_instance_} create svc-alias ip=${_address_} aliases=${_hostname_},sso.%%httpd_fqdn%%,${_sg_}${_su_alias_}
+
+	  elif [ ${_sg_} == "SSO" -a ${_su_} == "su_1" ]; then
+        litp /inventory/deployment1/cluster1/sc2/alias_${_su_instance_} create svc-alias ip=${_address_} aliases=${_hostname_},sso.%%httpd_fqdn%%,${_sg_}${_su_alias_}
+
+      else
+       litp /inventory/deployment1/alias_${_su_instance_} create svc-alias ip=${_address_} aliases=${_hostname_},${_sg_}${_su_alias_}
+
+     fi
+      #Ranges for cache LITP-2721
+      #_su_fire_="${_su_//[!0-9]}"
+      #litp ${SCFW}/fw_cache_${_su_instance_} ${ACTION} name="42 ${_sg_} ${_su_fire_} " dport="30000-65000"  source="${_address_}"
+      #litp ${SCFW}/fw_cache_udp_${_su_instance_} ${ACTION} name="44 udp ${_sg_} ${_su_fire_}" dport="30000-65000"  source="${_address_}" proto="udp"
+
+    done
+  done
+
+  # Update other components (i.e. non JBoss ones)
+
+
+  litp /inventory/deployment1/cluster1/logstash/su_0/logstash/ip update address=%%logstash_ipaddress%%
+  litp /inventory/deployment1/cluster1/logstash/su_0/logstash/ip update gateway=${TOR_SERVICES_GATEWAY}
+  litp /inventory/deployment1/cluster1/logstash/su_0/logstash/ip update subnet=${TOR_SERVICES_SUBNET}
+  litp /inventory/deployment1/cluster1/logstash/su_0/logstash/ip update net_name=${TOR_SERVICES_NETWORK}
+  litp /inventory/deployment1/cluster1/logstash/su_0/logstash/ip allocate
+  litp /inventory/deployment1/alias_logstash create svc-alias ip=%%logstash_ipaddress%% aliases=%%logstash_hostname%%,logstashhost
+  # Assign the httpd ip address from the site engineering. This isnt take from a pool as it needs to be explicitly
+  # assigned.
+  litp /inventory/deployment1/cluster1/httpd/su_0/apache_server/httpd_service/ip update address=%%httpd_ipaddress%%
+  litp /inventory/deployment1/cluster1/httpd/su_0/apache_server/httpd_service/ip update gateway=${TOR_SERVICES_GATEWAY}
+  litp /inventory/deployment1/cluster1/httpd/su_0/apache_server/httpd_service/ip update subnet=${TOR_SERVICES_SUBNET}
+  litp /inventory/deployment1/cluster1/httpd/su_0/apache_server/httpd_service/ip update net_name=${TOR_SERVICES_NETWORK}
+  litp /inventory/deployment1/cluster1/httpd/su_0/apache_server/httpd_service/ip allocate
+  litp /inventory/deployment1/alias_httpd create svc-alias ip=%%httpd_ipaddress%% aliases=%%httpd_hostname%%,httpd,${APACHE_FQDN}
+  #Assign ip for ssologger
+  litp /inventory/deployment1/cluster1/httpd/su_0/ssologger/ssologger_service/ip update address=192.168.50.50
+  litp /inventory/deployment1/cluster1/httpd/su_0/ssologger/ssologger_service/ip update net_name=${TOR_SERVICES_NETWORK}
+  litp /inventory/deployment1/cluster1/httpd/su_0/ssologger/ssologger_service/ip update subnet=192.168.50.0/24
+  litp /inventory/deployment1/cluster1/httpd/su_0/ssologger/ssologger_service/ip update gateway=192.168.50.1
+fi
+  }
+
+
+### Function: generate_ui_properties ###
+#
+#   Generate the host specific UI global properties file
+#
+# Arguments:
+#       $1 - Site Engineering Data File
+# Return Values:
+#       None
+########################################
+
+generate_ui_properties()
+{
+#setup variables and initial settings
+	ica_start_delim="#CITRIX_ADDRS_START"
+	ica_stop_delim="#CITRIX_ADDRS_END"
+	suffix_start_delim="#CITRIX_IDENTIFIERS_START"
+	suffix_stop_delim="#CITRIX_IDENTIFIERS_END"
+	web_hosts_start_delim="#WEB_HOSTS_START"
+	web_hosts_stop_delim="#WEB_HOSTS_END"
+	web_protocols_start_delim="#WEB_PROTOCOLS_START"
+	web_protocols_stop_delim="#WEB_PROTOCOLS_END"
+	web_ports_start_delim="#WEB_PORTS_START"
+	web_ports_stop_delim="#WEB_PORTS_END"
+
+	_icaHost_default="MASTERSERVICE"
+
+
+	web_protocols_start_default="https"
+	_secure="https"
+	_unsecure="http"
+
+	web_ports_start_default="443"
+	_unsecurePort="80"
+	_securePort="443"
+	_appServer="8080"
+	_ossMonitoring="57005"
+	_eniqEventsPort="18080"
+
+
+	local _global_properties_
+
+	_global_properties_dir="/opt/ericsson/nms/litp/etc/puppet/modules/cmw/files"
+	if [ ! -d ${_global_properties_dir} ]; then
+		${MKDIR} -p $_global_properties_dir
+	fi
+
+	_global_properties_="${_global_properties_dir}/global.properties"
+
+	if [ -f ${_global_properties_} ] ; then
+		$CP -p ${_global_properties_} ${_global_properties_}.old
+	fi
+
+  local _site_data_=$1
+  if [ ! -f ${_site_data_} ] ; then
+    error "${_site_data_} not found"
+    exit 2
+  fi
+#<----- setup variables and initial settings
+
+# parsing Citrix Farm block
+  local _icaAddr
+  _icaAddr=`get_sitedata_value ${_site_data_} alias_ctx_farm_master_host`
+  if [ $? -ne 0 ] ; then
+    error "${_icaAddr}"
+    exit 1
+  fi
+
+    local _icaAddr1
+  _icaAddr1=`get_sitedata_value ${_site_data_} alias_ctx_host_2`
+  if [ $? -ne 0 ] ; then
+    _icaAddr1=NOT_USED
+  fi
+
+  local _icaAddr2
+  _icaAddr2=`get_sitedata_value ${_site_data_} alias_ctx_host_3`
+  if [ $? -ne 0 ] ; then
+    _icaAddr2=NOT_USED
+  fi
+
+  local _icaAddr3
+  _icaAddr3=`get_sitedata_value ${_site_data_} alias_ctx_host_4`
+  if [ $? -ne 0 ] ; then
+    _icaAddr3=NOT_USED
+  fi
+
+#<----- parsing Citrix Farm block
+
+# Citrix applications suffix block
+  local _icaHost
+  _icaHost=`get_sitedata_value ${_site_data_} citrix_app_alias`
+  if [ $? -ne 0 ] ; then
+    _icaHost=${_icaHost_default}
+  fi
+#<----- Citrix applications suffix block
+
+# parsing web hosts block
+  local _default_apach_hostname
+  _default_apach_hostname=`get_sitedata_value ${_site_data_} httpd_hostname`
+  if [ $? -ne 0 ] ; then
+    error "${_default_apach_hostname}"
+    exit 1
+  fi
+
+  local _default_apach_fqdn
+  _default_apach_fqdn=`get_sitedata_value ${_site_data_} httpd_fqdn`
+  if [ $? -ne 0 ] ; then
+    error "${_default_apach_fqdn}"
+    exit 1
+  fi
+
+  local _ossMonitoringHost
+  _ossMonitoringHost=`get_sitedata_value ${_site_data_} LMS_IP`
+  if [ $? -ne 0 ] ; then
+    _ossMonitoringHost=NOT_USED
+  fi
+
+  local _eniqEventsHost
+  _eniqEventsHost=`get_sitedata_value ${_site_data_} eniq_event_hostname`
+  if [ $? -ne 0 ] ; then
+    _eniqEventsHost=NOT_USED
+  fi
+
+   local _eniqStatsHost
+  _eniqStatsHost=`get_sitedata_value ${_site_data_} eniq_stats_mgmt_hostname`
+  if [ $? -ne 0 ] ; then
+    _eniqStatsHost=NOT_USED
+  fi
+
+    local _eniqManagement
+  _eniqManagement=`get_sitedata_value ${_site_data_} eniq_mgmt_host_hostname`
+  if [ $? -ne 0 ] ; then
+    _eniqManagement=NOT_USED
+  fi
+
+    local _eniqBusinessHost
+  _eniqBusinessHost=`get_sitedata_value ${_site_data_} eniq_stats_bo_bis_hostname`
+  if [ $? -ne 0 ] ; then
+    _eniqBusinessHost=NOT_USED
+  fi
+
+    local _alexHost
+  _alexHost=`get_sitedata_value ${_site_data_} alias_masterservice`
+  if [ $? -ne 0 ] ; then
+    _alexHost=NOT_USED
+  fi
+
+#<----- parsing web hosts block
+
+  # Get the SSO properties
+  local _httpd_fqdn_
+  _httpd_fqdn_=`get_sitedata_value ${_site_data_} httpd_fqdn`
+  if [ $? -ne 0 ] ; then
+    error "${_httpd_fqdn_}"
+    exit 1
+  fi
+  local _httpd_sso_cookie_domain_
+  _httpd_sso_cookie_domain_=`get_sitedata_value ${_site_data_} httpd_sso_cookie_domain`
+  if [ $? -ne 0 ] ; then
+    error "${_httpd_sso_cookie_domain_}"
+    exit 1
+  fi
+  local _ossrc_ldap_1_fqh_
+  _ossrc_ldap_1_fqh_=`get_sitedata_value ${_site_data_} ossrc_ldap_1_fqh`
+  if [ $? -ne 0 ] ; then
+    error "${_ossrc_ldap_1_fqh_}"
+    exit 1
+  fi
+  local _ossrc_ldap_2_fqh_
+  _ossrc_ldap_2_fqh_=`get_sitedata_value ${_site_data_} ossrc_ldap_2_fqh`
+  if [ $? -ne 0 ] ; then
+    error "${_ossrc_ldap_2_fqh_}"
+    exit 1
+  fi
+  local _ldap_root_suffix_
+  _ldap_root_suffix_=`get_sitedata_value ${_site_data_} ldap_root_suffix`
+  if [ $? -ne 0 ] ; then
+    error "${_ldap_root_suffix_}"
+    exit 1
+  fi
+  local _ldap_admin_access_
+  _ldap_admin_access_=`get_sitedata_value ${_site_data_} cominf_ldap_proxy_agent_passwd`
+  if [ $? -ne 0 ] ; then
+    error "${_ldap_admin_access_}"
+  exit 1
+  fi
+  
+#Write to file
+
+  ${ECHO} "#!/bin/bash
+
+####################################################
+#
+# UI properties part
+# Please do not modify it as all part is important and machine readable
+#
+####################################################
+${ica_start_delim}
+icaAddr=${_icaAddr}
+icaAddr1=${_icaAddr1}
+icaAddr2=${_icaAddr2}
+icaAddr3=${_icaAddr3}
+${ica_stop_delim}
+
+${suffix_start_delim}
+default=${_icaHost_default}
+icaHost=${_icaHost}
+${suffix_stop_delim}
+
+${web_hosts_start_delim}
+default=${_default_apach_fqdn}
+ossMonitoringHost=${_ossMonitoringHost}
+eniqEventsHost=${_eniqEventsHost}
+eniqStatsHost=${_eniqStatsHost}
+eniqManagement=${_eniqManagement}
+eniqBusinessHost=${_eniqBusinessHost}
+alexHost=${_alexHost}
+${web_hosts_stop_delim}
+
+${web_protocols_start_delim}
+default=${web_protocols_start_default}
+secure=${_secure}
+unsecure=${_unsecure}
+${web_protocols_stop_delim}
+
+${web_ports_start_delim}
+default=${web_ports_start_default}
+unsecurePort=${_unsecurePort}
+securePort=${_securePort}
+appServer=${_appServer}
+ossMonitoring=${_ossMonitoring}
+eniqEventsPort=${_eniqEventsPort}
+${web_ports_stop_delim}
+
+####################################################
+#
+# Generated SSO properties
+#
+####################################################
+UI_PRES_SERVER=${_httpd_fqdn_}
+SSO_COOKIE_DOMAIN=${_httpd_sso_cookie_domain_}
+COM_INF_LDAP_HOST_1=${_ossrc_ldap_1_fqh_}
+COM_INF_LDAP_HOST_2=${_ossrc_ldap_2_fqh_}
+COM_INF_LDAP_ROOT_SUFFIX=${_ldap_root_suffix_}
+COM_INF_LDAP_ADMIN_CN=\"proxyagent,ou=profile,${_ldap_root_suffix_}\"
+COM_INF_LDAP_ADMIN_ACCESS=${_ldap_admin_access_}
+
+" > ${_global_properties_}
+
+}
+########### <--------- generate_ui_properties
+
+
+#an ugly solution for updating the repositories data
+#this is slightly modified import_tor_sw function (from the load_definition.sh)
+update_tor_sw_repo()
+{
+  local _iso_=$1
+  local _umount_=0
+  local _mount_
+  if [ -d ${_iso_} ] ; then
+    _mount_=${_iso_}
+  else
+    _umount_=1
+    _mount_=/mnt/`${BASENAME} ${_iso_}`
+    mount_iso ${_iso_} ${_mount_}
+  fi
+  # Import the iso contents using the litp import command
+  local _tor_vrepo_
+
+  _tor_vrepo_=`get_iso_pkg_dir ${_mount_}`
+  if [ $? -ne 0 ] ; then
+    error "${_tor_vrepo_}"
+    exit 1
+  fi
+  local _vname_=`get_repo_name ${_tor_vrepo_}`
+  # Create the imported repo defs in /definition so it can be pushed out to peer nodes
+  define_repo "${_vname_}" "${_tor_vrepo_}"
+
+  if [ ${_umount_} -eq 1 ] ; then
+    umount_iso ${_mount_} "delete"
+  fi
+}
+
+#function to update networking parameters for the installation
+#hostname_network determines which IP is used in /etc/hosts for each node, in our case the IP we will allocate below under <node>/os/ip
+update_hostname_network() {
+    litp /inventory/deployment1/ms1/ms_node/os update hostname_network=${TOR_SERVICES_NETWORK} create_hosts_entry=False
+    # Set the default network to TORservices
+    litp /inventory/deployment1/ms1 update default_net_name=${TOR_SERVICES_NETWORK}
+    litp /inventory/deployment1/cluster1/sc1/control_1/os update hostname_network=${TOR_SERVICES_NETWORK} create_hosts_entry=False
+    # Set the default network to TORservices
+    litp /inventory/deployment1/cluster1/sc1 update default_net_name=${TOR_SERVICES_NETWORK}
+    litp /inventory/deployment1/cluster1/sc2/control_2/os update hostname_network=${TOR_SERVICES_NETWORK} create_hosts_entry=False
+    # Set the default network to TORservices
+    litp /inventory/deployment1/cluster1/sc2 update default_net_name=${TOR_SERVICES_NETWORK}
+}
+
+
+# Create IP address pools for TOR Services, Backup and Storage stuff.
+create_ip_pools() {
+    litp /inventory/deployment1/${TOR_SERVICE_POOL} create ip-address-pool
+    litp /inventory/deployment1/${TOR_STORAGE_POOL} create ip-address-pool
+    litp /inventory/deployment1/${TOR_BACKUP_POOL} create ip-address-pool
+    litp /inventory/deployment1/${TOR_IPv6_POOL} create ipv6-address-pool
+}
+
+
+#allocate an IP from the backup network to ms1 node
+ms1_allocate_backup_network_ip() {
+    litp /inventory/deployment1/${TOR_BACKUP_POOL}/lms_ip_backup create ip-address address=%%LMS_IP_backup%% \
+        subnet=${TOR_BACKUP_SUBNET} net_name=${TOR_BACKUP_NETWORK}
+    litp /inventory/deployment1/${TOR_BACKUP_POOL}/lms_ip_backup enable
+    litp /inventory/deployment1/ms1/ms_node/ip_backup create ip-address pool=${TOR_BACKUP_POOL} net_name=${TOR_BACKUP_NETWORK}
+    litp /inventory/deployment1/ms1/ms_node/ip_backup allocate
+}
+
+
+
+#Allocate IPs to control nodes
+sc_allocate_ip_addresses() {
+    litp /inventory/deployment1/${TOR_SERVICE_POOL}/sc1_ip create ip-address \
+        subnet=${TOR_SERVICES_SUBNET} address=%%node1_IP%% gateway=${TOR_SERVICES_GATEWAY} net_name=${TOR_SERVICES_NETWORK}
+    litp /inventory/deployment1/${TOR_SERVICE_POOL}/sc1_ip enable
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/ip update pool=${TOR_SERVICE_POOL} net_name=${TOR_SERVICES_NETWORK}
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/ip allocate
+    litp /inventory/deployment1/alias_sc1 create svc-alias ip=%%node1_IP%% aliases=sc-1
+    # ipv6
+    if [ "%%node1_IPv6%%" != "" ]; then
+        litp /inventory/deployment1/${TOR_IPv6_POOL}/sc1_ipv6 create ipv6-address address=%%node1_IPv6%% \
+            subnet=%%TORIPv6_subnet%% gateway=${TOR_GATEWAY_IPV6} net_name=${TOR_SERVICES_NETWORK}
+        litp /inventory/deployment1/${TOR_IPv6_POOL}/sc1_ipv6 enable
+        litp /inventory/deployment1/cluster1/sc1/ipv6 create ipv6-address pool=${TOR_IPv6_POOL} net_name=${TOR_SERVICES_NETWORK}
+        litp /inventory/deployment1/cluster1/sc1/ipv6 allocate
+		litp /inventory/deployment1/alias_sc1_ipv6 create svc-alias ip=%%node1_IPv6%% aliases=%%node1_hostname%%-v6
+    fi
+    # allocate an IP from the storage network
+    litp /inventory/deployment1/${TOR_STORAGE_POOL}/sc1_ip_storage create ip-address address=%%node1_IP_storage%% \
+        subnet=${TOR_STORAGE_SUBNET} net_name=${TOR_STORAGE_NETWORK}
+    litp /inventory/deployment1/${TOR_STORAGE_POOL}/sc1_ip_storage enable
+    litp /inventory/deployment1/cluster1/sc1/ip_storage create ip-address pool=${TOR_STORAGE_POOL} net_name=${TOR_STORAGE_NETWORK}
+    litp /inventory/deployment1/cluster1/sc1/ip_storage allocate
+    # allocate an IP from the backup network
+    litp /inventory/deployment1/${TOR_BACKUP_POOL}/sc1_ip_backup create ip-address address=%%node1_IP_backup%% \
+        subnet=${TOR_BACKUP_SUBNET} net_name=${TOR_BACKUP_NETWORK}
+    litp /inventory/deployment1/${TOR_BACKUP_POOL}/sc1_ip_backup enable
+    litp /inventory/deployment1/cluster1/sc1/ip_backup create ip-address pool=${TOR_BACKUP_POOL} net_name=${TOR_BACKUP_NETWORK}
+    litp /inventory/deployment1/cluster1/sc1/ip_backup allocate
+    # update network for Hyperic agent
+    litp /inventory/deployment1/cluster1/sc1/control_1/hypericagent/hyagent update hyperic_net=${TOR_SERVICES_NETWORK}
+
+    # Allocate IPs to control 2
+    litp /inventory/deployment1/${TOR_SERVICE_POOL}/sc2_ip create ip-address \
+        subnet=${TOR_SERVICES_SUBNET} address=%%node2_IP%% gateway=${TOR_SERVICES_GATEWAY} net_name=${TOR_SERVICES_NETWORK}
+    litp /inventory/deployment1/${TOR_SERVICE_POOL}/sc2_ip enable
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/ip update pool=${TOR_SERVICE_POOL} net_name=${TOR_SERVICES_NETWORK}
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/ip allocate
+    litp /inventory/deployment1/alias_sc2 create svc-alias ip=%%node2_IP%% aliases=sc-2
+    # ipv6
+    if [ "%%node1_IPv6%%" != "" ]; then
+        litp /inventory/deployment1/${TOR_IPv6_POOL}/sc2_ipv6 create ipv6-address address=%%node2_IPv6%% \
+            subnet=%%TORIPv6_subnet%% gateway=${TOR_GATEWAY_IPV6} net_name=${TOR_SERVICES_NETWORK}
+        litp /inventory/deployment1/${TOR_IPv6_POOL}/sc2_ipv6 enable
+        litp /inventory/deployment1/cluster1/sc2/ipv6 create ipv6-address pool=${TOR_IPv6_POOL} net_name=${TOR_SERVICES_NETWORK}
+        litp /inventory/deployment1/cluster1/sc2/ipv6 allocate
+		litp /inventory/deployment1/alias_sc2_ipv6 create svc-alias ip=%%node2_IPv6%% aliases=%%node2_hostname%%-v6
+    fi
+    # allocate an IP from the storage network
+    litp /inventory/deployment1/${TOR_STORAGE_POOL}/sc2_ip_storage create ip-address address=%%node2_IP_storage%% \
+        subnet=${TOR_STORAGE_SUBNET} net_name=${TOR_STORAGE_NETWORK}
+    litp /inventory/deployment1/${TOR_STORAGE_POOL}/sc2_ip_storage enable
+    litp /inventory/deployment1/cluster1/sc2/ip_storage create ip-address pool=${TOR_STORAGE_POOL} net_name=${TOR_STORAGE_NETWORK}
+    litp /inventory/deployment1/cluster1/sc2/ip_storage allocate
+    # allocate an IP from the backup network
+    litp /inventory/deployment1/${TOR_BACKUP_POOL}/sc2_ip_backup create ip-address address=%%node2_IP_backup%% \
+        subnet=${TOR_BACKUP_SUBNET} net_name=${TOR_BACKUP_NETWORK}
+    litp /inventory/deployment1/${TOR_BACKUP_POOL}/sc2_ip_backup enable
+    litp /inventory/deployment1/cluster1/sc2/ip_backup create ip-address pool=${TOR_BACKUP_POOL} net_name=${TOR_BACKUP_NETWORK}
+    litp /inventory/deployment1/cluster1/sc2/ip_backup allocate
+}
+
+#update Hyperic network
+update_hyperic_network() {
+    # update network for Hyperic agent
+    litp /inventory/deployment1/ms1/ms_node/hypericagent/hyagent update hyperic_net=${TOR_SERVICES_NETWORK}
+    litp /inventory/deployment1/cluster1/sc2/control_2/hypericagent/hyagent update hyperic_net=${TOR_SERVICES_NETWORK}
+
+    # update network for Hyperic server
+    litp /inventory/deployment1/ms1/ms_node/hypericserver/hyserver update hyperic_net=${TOR_SERVICES_NETWORK}
+}
+
+### update_rsyslog_conf ###
+#
+# Copy rsyslog configuration files to Puppet cmw-file directory
+#
+# Arguments:
+#       $1 - Site Engineering Data File
+# Return Values:
+#       None
+update_rsyslog_conf ()
+{
+  local _node1_hostname_
+  local _logstash_
+  local _site_data_=$1
+
+  _node1_hostname_=$(get_sitedata_value ${_site_data_} node1_hostname)
+  if [ "${_node1_hostname_}" == "" ] ; then
+    error "${_node1_hostname_}"
+    exit 1
+  fi
+
+  _logstash_=$(get_sitedata_value ${_site_data_} logstash_hostname)
+  if [ "${_logstash_}" == "" ] ; then
+    error "${_logstash_}"
+    exit 1
+  fi
+  
+  local _0_base_template_="/opt/ericsson/torinst/etc/0_base.conf.template"
+  local _0_base_conf_="/opt/ericsson/torinst/etc/0_base.conf"
+	
+  local _20_client_template_="/opt/ericsson/torinst/etc/20_rsys_client.conf.template"
+  local _20_server_template_="/opt/ericsson/torinst/etc/20_rsys_server.conf.template"
+  local _20_client_conf_="/opt/ericsson/torinst/etc/20_rsys_client.conf"
+  local _20_server_conf_="/opt/ericsson/torinst/etc/20_rsys_server.conf"
+	
+  local _puppet_cmw_dir_="/opt/ericsson/nms/litp/etc/puppet/modules/cmw/files/"
+  log "Updating rsyslog configuration"
+  ${CP} ${_0_base_template_} ${_0_base_conf_}
+  ${CP} ${_20_client_template_} ${_20_client_conf_}
+  ${CP} ${_20_server_template_} ${_20_server_conf_}
+  ${SED} -i "s/__node1_hostname__/${_node1_hostname_}/g" ${_20_client_conf_}
+  ${SED} -i "s/__node1_hostname__/${_node1_hostname_}/g" ${_20_server_conf_}
+
+  ${MV} ${_0_base_conf_} ${_puppet_cmw_dir_}/
+  ${MV} ${_20_client_conf_} ${_puppet_cmw_dir_}/
+  ${MV} ${_20_server_conf_} ${_puppet_cmw_dir_}/
+} 
+
+# ---------------------------------------------
+# UPDATE NFS SERVER DETAILS
+# ---------------------------------------------
+# "SFS" driver is used for NAS storage device and "RHEL" for when an extra RHEL
+# In case of SingleNode installation MS1 is used as NFS server
+# This is a counterpart of the sfs_*.xml definition snippets
+update_nas_settings() {
+    if [[ $# > 0 ]]; then
+        local _installation_type_=$1
+    else
+        local _installation_type_='multinode'
+    fi
+
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/cluster update driver="RHEL" username="root" server="%%LMS_IP%%" path="${CLUSTER_SHARE_PATH}"
+    else
+        litp /inventory/deployment1/ms1/ms_node/sfs/cluster update name="${CLUSTER_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" \
+            storage_pool="%%tor_sfs_storage_pool%%" server="%%sfs_console_IP%%" path="${CLUSTER_SHARE_PATH}" \
+			shared_size="${CLUSTER_SHARE_SIZE}"
+
+        #Mount /cluster on controller 1
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs/sfs_share_cluster update \
+            service="${CLUSTER_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+        #Mount /cluster on controller 2
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs/sfs_share_cluster update \
+            service="${CLUSTER_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+    fi
+
+
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/data update driver="RHEL" username="root" server="%%LMS_IP%%" path="${DATA_SHARE_PATH}"
+    else
+        litp /inventory/deployment1/ms1/ms_node/sfs/data update name="${DATA_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" \
+            storage_pool="%%tor_sfs_storage_pool%%" server="%%sfs_console_IP%%" path="${DATA_SHARE_PATH}" \
+			shared_size="${DATA_SHARE_SIZE}"
+
+        #Mount  /etc/opt/ericsson/tor/data on controller 1
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs/sfs_share_tor_data update \
+            service="${DATA_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+        #Mount  /etc/opt/ericsson/tor/data on controller 2
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs/sfs_share_tor_data update \
+            service="${DATA_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+    fi
+
+
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/no_rollback update driver="RHEL" username="root" server="%%LMS_IP%%" path="${NO_ROLLBACK_SHARE_PATH}"
+    else
+        litp /inventory/deployment1/ms1/ms_node/sfs/no_rollback update name="${NO_ROLLBACK_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" \
+            storage_pool="%%tor_sfs_storage_pool%%" server="%%sfs_console_IP%%" path="${NO_ROLLBACK_SHARE_PATH}" \
+			shared_size="${NO_ROLLBACK_SHARE_SIZE}"
+
+        #Mount /var/opt/ericsson/tor/no_rollback on controller 1
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs/sfs_share_tor_no_rollback update \
+            service="${NO_ROLLBACK_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+        #Mount /var/opt/ericsson/tor/no_rollback on controller 2
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs/sfs_share_tor_no_rollback update \
+            service="${NO_ROLLBACK_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+    fi
+
+
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/export_storadm update driver="RHEL" username="root" server="%%LMS_IP%%" path="${SFS_STORE_ADM_SHARE_PATH}"
+    else
+        litp /inventory/deployment1/ms1/ms_node/sfs/export_storadm update name="${SFS_STORE_ADM_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" \
+            storage_pool="%%tor_sfs_storage_pool%%" server="%%sfs_console_IP%%" path="${SFS_STORE_ADM_SHARE_PATH}" \
+			shared_size="${SFS_STORE_ADM_SHARE_SIZE}"
+
+        #Mount storadm on LITP Management Server
+        litp /inventory/deployment1/ms1/ms_node/sfs_homedir/sfs_share_storadm update \
+            service="${SFS_STORE_ADM_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+        #Mount storadm on controller 1
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs_homedir/sfs_share_storadm update \
+            service="${SFS_STORE_ADM_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+        #Mount storadm on controller 2
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs_homedir/sfs_share_storadm update \
+			service="${SFS_STORE_ADM_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+    fi
+
+
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/export_storobs update driver="RHEL" username="root" server="%%LMS_IP%%" path="${SFS_STORE_OBS_SHARE_PATH}"
+    else
+        litp /inventory/deployment1/ms1/ms_node/sfs/export_storobs update name="${SFS_STORE_OBS_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" \
+            storage_pool="%%tor_sfs_storage_pool%%" server="%%sfs_console_IP%%" path="${SFS_STORE_OBS_SHARE_PATH}" \
+			shared_size="${SFS_STORE_OBS_SHARE_SIZE}"
+        
+		#Mount storobs on LITP Management Server
+        litp /inventory/deployment1/ms1/ms_node/sfs_homedir/sfs_share_storobs update \
+            service="${SFS_STORE_OBS_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+		#Mount storobs on controller 1
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs_homedir/sfs_share_storobs \
+            update service="${SFS_STORE_OBS_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+		#Mount storobs on controller 2
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs_homedir/sfs_share_storobs \
+            update service="${SFS_STORE_OBS_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+    fi
+	
+	#**********Update NAS settings for Java heap and core dump location
+	#Mount hcdumps on LITP management server and both controllers
+	
+	if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/hcdumps update driver="RHEL" username="root" server="%%LMS_IP%%" path="${HCDUMPS_SHARE_PATH}"
+    else
+        litp /inventory/deployment1/ms1/ms_node/sfs/hcdumps update name="${HCDUMPS_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" \
+            storage_pool="%%tor_sfs_storage_pool%%" server="%%sfs_console_IP%%" path="${HCDUMPS_SHARE_PATH}" \
+			shared_size="${HCDUMPS_SHARE_SIZE}"
+        
+		#Mount hcdumps on LITP Management Server
+        litp /inventory/deployment1/ms1/ms_node/sfs_homedir/sfs_share_hcdumps update \
+            service="${HCDUMPS_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+		#Mount hcdumps on controller 1
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs_homedir/sfs_share_hcdumps \
+            update service="${HCDUMPS_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+		#Mount hcdumps on controller 2
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs_homedir/sfs_share_hcdumps \
+            update service="${HCDUMPS_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+    fi
+	#***************
+
+
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/rsyslog_central update driver="RHEL" username="root" server="%%LMS_IP%%" path="${RSYSLOG_SHARE_PATH}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs_rsyslog/sfs_share_rsyslog update \
+            options="rw,context=system_u:object_r:var_log_t:s0"
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs_rsyslog/sfs_share_rsyslog update \
+            options="rw,context=system_u:object_r:var_log_t:s0"
+    else
+        litp /inventory/deployment1/ms1/ms_node/sfs/rsyslog_central update name="${RSYSLOG_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" \
+            storage_pool="%%tor_sfs_storage_pool%%" server="%%sfs_console_IP%%" path="${RSYSLOG_SHARE_PATH}" \
+			shared_size="${RSYSLOG_SHARE_SIZE}"
+
+        #Mount /var/log/central on controller 1 and update mount options
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs_rsyslog/sfs_share_rsyslog update \
+            service="${RSYSLOG_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_CLOG}
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs_rsyslog/sfs_share_rsyslog update \
+            options="rw,context=system_u:object_r:var_log_t:s0"
+
+        #Mount /var/log/central on controller 2 and update mount options
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs_rsyslog/sfs_share_rsyslog update \
+            service="${RSYSLOG_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_CLOG}
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs_rsyslog/sfs_share_rsyslog update \
+            options="rw,context=system_u:object_r:var_log_t:s0"
+    fi
+
+
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/logstash update driver="RHEL" username="root" server="%%LMS_IP%%" path="${LOGSTASH_SHARE_PATH}"
+    else
+        litp /inventory/deployment1/ms1/ms_node/sfs/logstash update name="${LOGSTASH_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" \
+            storage_pool="%%tor_sfs_storage_pool%%" server="%%sfs_console_IP%%" path="${LOGSTASH_SHARE_PATH}" \
+			shared_size="${LOGSTASH_SHARE_SIZE}"
+
+        #Mount /var/opt/ericsson/tor/no_rollback/logstash on controller 1
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs/sfs_share_logstash update \
+            service="${LOGSTASH_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+        #Mount /var/opt/ericsson/tor/no_rollback on controller 2
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs/sfs_share_logstash update \
+            service="${LOGSTASH_SHARE_NAME}" data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+    fi
+
+    #Should we require to provide correct data and mount the shares form 'real' server or should we create the shares on MS1?
+    #update segment 1 share to the model.
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/export_segment1 update driver="RHEL" username=root path="%%export_segment1_path%%" server="%%LMS_IP%%"
+    else
+        #update segment 1 share to the model.
+        litp /inventory/deployment1/ms1/ms_node/sfs/export_segment1 update name="${SFS_OSS_1_SEGMENT_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" create_fs="False" \
+            storage_pool="%%export_segment1_storage_pool%%" server="%%sfs_console_IP%%" path="%%export_segment1_path%%"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs/sfs_share_segment1/ update service="${SFS_OSS_1_SEGMENT_SHARE_NAME}" \
+            data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_SEGMENT_1}
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs/sfs_share_segment1/ update service="${SFS_OSS_1_SEGMENT_SHARE_NAME}" \
+            data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_SEGMENT_1}
+    fi
+
+    #update DDC DATA share to the model.
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        litp /inventory/deployment1/ms1/ms_node/sfs/ddc_data update driver="RHEL" username=root path="%%ddc_data_path%%" server="%%LMS_IP%%"
+    else
+        #update DDC DATA share to the model.
+        litp /inventory/deployment1/ms1/ms_node/sfs/ddc_data update name="${SFS_OSS_1_DDC_DATA_SHARE_NAME}" \
+            driver="SFS" username="%%sfs_console_username%%" password="%%sfs_console_password%%" create_fs="False" \
+            storage_pool="%%ddc_data_storage_pool%%" server="%%sfs_console_IP%%" path="%%ddc_data_path%%"
+
+        litp /inventory/deployment1/ms1/ms_node/sfs_homedir/sfs_share_ddc_data/ update service="${SFS_OSS_1_DDC_DATA_SHARE_NAME}" \
+            data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/sfs_homedir/sfs_share_ddc_data/ update service="${SFS_OSS_1_DDC_DATA_SHARE_NAME}" \
+            data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/sfs_homedir/sfs_share_ddc_data/ update service="${SFS_OSS_1_DDC_DATA_SHARE_NAME}" \
+            data_net="${TOR_STORAGE_NETWORK}" data_vip=${SFS_VIP_GENERAL}
+    fi
+}
+
+
+#Add OSS-RC aliases
+add_oss_rc_aliases() {
+    litp /inventory/deployment1/cluster1/sc1/alias_masterservice create svc-alias ip="%%alias_masterservice%%" aliases="masterservice"
+        litp /inventory/deployment1/cluster1/sc2/alias_masterservice create svc-alias ip="%%alias_masterservice%%" aliases="masterservice"
+
+        litp /inventory/deployment1/cluster1/sc1/alias_ossrc_ldap_1 create svc-alias ip="%%alias_ossrc_ldap_1%%" aliases="ossrc-ldap-1"
+        litp /inventory/deployment1/cluster1/sc2/alias_ossrc_ldap_1 create svc-alias ip="%%alias_ossrc_ldap_1%%" aliases="ossrc-ldap-1"
+
+        litp /inventory/deployment1/cluster1/sc1/alias_ossrc_ldap_2 create svc-alias ip="%%alias_ossrc_ldap_2%%" aliases="ossrc-ldap-2"
+        litp /inventory/deployment1/cluster1/sc2/alias_ossrc_ldap_2 create svc-alias ip="%%alias_ossrc_ldap_2%%" aliases="ossrc-ldap-2"
+
+        litp /inventory/deployment1/cluster1/sc1/alias_ctx_farm_master_host create svc-alias ip="%%alias_ctx_farm_master_host%%" aliases="ctx-farm-master-host"
+        litp /inventory/deployment1/cluster1/sc2/alias_ctx_farm_master_host create svc-alias ip="%%alias_ctx_farm_master_host%%" aliases="ctx-farm-master-host"
+}
+
+
+
+
+
+# setup LVM
+# LVM controller per node
+setup_LVM() {
+    if [[ $# > 0 ]]; then
+        local _installation_type_=$1
+    else
+        local _installation_type_='multinode'
+    fi
+
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm create lvm
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm create lvm
+
+    # LVM boot block device
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/pv_root create phys-vol \
+    device="/inventory/deployment1/cluster1/sc1/control_1/os/boot_blockdevice" enforcer="kickstart"
+
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/vg_root create vol-grp pv="pv_root"
+
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_root create log-vol vg="vg_root" size="${LV_ROOT_SIZE}" snap_percent="${SNAP_PERCENT}"
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_root create file-sys lv="lv_root" mount_point="/"
+
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_var create log-vol vg="vg_root" size="${LV_VAR_SIZE}" snap_percent="${SNAP_PERCENT}"
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_var create file-sys lv="lv_var" mount_point="/var"
+
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_swap create log-vol vg="vg_root" size="${LV_SWAP_SIZE}" snap_percent="${SNAP_PERCENT}"
+    litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_swap create file-sys lv="lv_swap" mount_point="swap" fs_type="swap"
+
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/pv_root create phys-vol \
+    device="/inventory/deployment1/cluster1/sc2/control_2/os/boot_blockdevice" enforcer="kickstart"
+
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/vg_root create vol-grp pv="pv_root"
+
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_root create log-vol vg="vg_root" size="${LV_ROOT_SIZE}" snap_percent="${SNAP_PERCENT}"
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_root create file-sys lv="lv_root" mount_point="/"
+
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_var create log-vol vg="vg_root" size="${LV_VAR_SIZE}" snap_percent="${SNAP_PERCENT}"
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_var create file-sys lv="lv_var" mount_point="/var"
+
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_swap create log-vol vg="vg_root" size="${LV_SWAP_SIZE}" snap_percent="${SNAP_PERCENT}"
+    litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_swap create file-sys lv="lv_swap" mount_point="swap" fs_type="swap"
+
+    # LVM private block device
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        #we use only one disk and single PV/VG in singlenode installation
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_opt create log-vol vg="vg_root" size="${LV_OPT_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_opt create file-sys lv="lv_opt" mount_point="/opt/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_var_ericsson create log-vol vg="vg_root" size="${LV_VAR_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_var_ericsson create file-sys lv="lv_var_ericsson" mount_point="/var/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_etc create log-vol vg="vg_root" size="${LV_ETC_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_etc create file-sys lv="lv_etc" mount_point="/etc/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_home create log-vol vg="vg_root" size="${LV_HOME_SIZE}" snap_percent="${HOME_SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_home create file-sys lv="lv_home" mount_point="/home"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_pms_seg_data create log-vol vg="vg_root" size="${LV_PMS_SEG_DATA_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_pms_seg_data create file-sys lv="lv_pms_seg_data" mount_point="/var/opt/ericsson/nms_umts_pms_seg/data"
+             
+    else
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/pv_app create phys-vol \
+            device="/inventory/deployment1/cluster1/sc1/control_1/os/data_blockdevice_app" enforcer="kickstart"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/vg_app create vol-grp pv="pv_app"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_opt create log-vol vg="vg_app" size="${LV_OPT_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_opt create file-sys lv="lv_opt" mount_point="/opt/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_var_ericsson create log-vol vg="vg_app" size="${LV_VAR_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_var_ericsson create file-sys lv="lv_var_ericsson" mount_point="/var/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_etc create log-vol vg="vg_app" size="${LV_ETC_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_etc create file-sys lv="lv_etc" mount_point="/etc/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_home create log-vol vg="vg_app" size="${LV_HOME_SIZE}" snap_percent="${HOME_SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_home create file-sys lv="lv_home" mount_point="/home"
+
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_pms_seg_data create log-vol vg="vg_app" size="${LV_PMS_SEG_DATA_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_pms_seg_data create file-sys lv="lv_pms_seg_data" mount_point="/var/opt/ericsson/nms_umts_pms_seg/data"
+        
+        for jboss_hornetq in FMPMServ_su_0_jee_instance FMPMServ_su_1_jee_instance MedCore_su_0_jee_instance MedCore_su_1_jee_instance MSFM_su_0_jee_instance MSFM_su_1_jee_instance MSPM0_su_0_jee_instance MSPM0_su_1_jee_instance MSPM1_su_0_jee_instance MSPM1_su_1_jee_instance SSO_su_0_jee_instance UIServ_su_0_jee_instance UIServ_su_1_jee_instance
+        do
+        	
+        	litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_${jboss_hornetq} create log-vol vg="vg_app" size="${LV_JBOSS_HORNETQ}" snap_percent=0
+        	litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/fs_${jboss_hornetq} create file-sys lv="lv_${jboss_hornetq}" mount_point="/var/ericsson/${jboss_hornetq}"        
+        
+        done
+        
+        
+    fi
+
+
+
+    if [[ ${_installation_type_} == 'singlenode' ]]; then
+        #we use only one disk and single PV/VG in singlenode installation
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_opt create log-vol vg="vg_root" size="${LV_OPT_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_opt create file-sys lv="lv_opt" mount_point="/opt/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_var_ericsson create log-vol vg="vg_root" size="${LV_VAR_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_var_ericsson create file-sys lv="lv_var_ericsson" mount_point="/var/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_etc create log-vol vg="vg_root" size="${LV_ETC_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_etc create file-sys lv="lv_etc" mount_point="/etc/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_home create log-vol vg="vg_root" size="${LV_HOME_SIZE}" snap_percent="${HOME_SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_home create file-sys lv="lv_home" mount_point="/home"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_pms_seg_data create log-vol vg="vg_root" size="${LV_PMS_SEG_DATA_SIZE}" snap_percent="${HOME_SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_pms_seg_data create file-sys lv="lv_pms_seg_data" mount_point="/var/opt/ericsson/nms_umts_pms_seg/data"
+    else
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/pv_app create phys-vol \
+            device="/inventory/deployment1/cluster1/sc2/control_2/os/data_blockdevice_app" enforcer="kickstart"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/vg_app create vol-grp pv="pv_app"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_opt create log-vol vg="vg_app" size="${LV_OPT_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_opt create file-sys lv="lv_opt" mount_point="/opt/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_var_ericsson create log-vol vg="vg_app" size="${LV_VAR_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_var_ericsson create file-sys lv="lv_var_ericsson" mount_point="/var/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_etc create log-vol vg="vg_app" size="${LV_ETC_ERIC_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_etc create file-sys lv="lv_etc" mount_point="/etc/ericsson"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_home create log-vol vg="vg_app" size="${LV_HOME_SIZE}" snap_percent="${HOME_SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_home create file-sys lv="lv_home" mount_point="/home"
+
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_pms_seg_data create log-vol vg="vg_app" size="${LV_PMS_SEG_DATA_SIZE}" snap_percent="${SNAP_PERCENT}"
+        litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_pms_seg_data create file-sys lv="lv_pms_seg_data" mount_point="/var/opt/ericsson/nms_umts_pms_seg/data"
+        
+        for jboss_hornetq in FMPMServ_su_0_jee_instance FMPMServ_su_1_jee_instance MedCore_su_0_jee_instance MedCore_su_1_jee_instance MSFM_su_0_jee_instance MSFM_su_1_jee_instance MSPM0_su_0_jee_instance MSPM0_su_1_jee_instance MSPM1_su_0_jee_instance MSPM1_su_1_jee_instance SSO_su_1_jee_instance UIServ_su_0_jee_instance UIServ_su_1_jee_instance
+        do
+        	
+        	litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_${jboss_hornetq} create log-vol vg="vg_app" size="${LV_JBOSS_HORNETQ}" snap_percent=0
+        	litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/fs_${jboss_hornetq} create file-sys lv="lv_${jboss_hornetq}" mount_point="/var/ericsson/${jboss_hornetq}"        
+        
+        done
+        
+    fi
+}
+
+### Function: crypt ###
+#   DES encrypt password string with escapes for '$' character.  Used for LITP
+#   Linux account passwords defined unencrypted in SED (TORD-574).
+# Arguments:
+#       $1 - The string to be encrypted
+#
+# Return Values:
+#       None - encrypted password is echo'd
+#
+#
+function crypt () {
+  python -c  "
+import crypt
+import sys
+enc=crypt.crypt(sys.argv[1])
+print  enc
+" $1 | sed 's/\$/\\\$/g'
+}
+
+
+

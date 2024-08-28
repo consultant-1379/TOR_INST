@@ -1,0 +1,18 @@
+<tor_sw>
+  <litp:component-def id="datapersistence">
+    <litp:deployable-entity-def id="de">
+      <app-type/>
+      <install-source/>
+      <name/>
+      <run-level>10</run-level>
+      <service>jboss_FMPMServ</service>
+      <version/>
+    </litp:deployable-entity-def>
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICdatapersist_CXP9030106</name>
+	  <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

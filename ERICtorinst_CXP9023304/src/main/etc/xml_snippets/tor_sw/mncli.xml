@@ -1,0 +1,9 @@
+<tor_sw>
+  <litp:component-def id="mncli">
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICmncli_CXP9023712</name>
+	  <repository>LITP</repository>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

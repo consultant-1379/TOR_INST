@@ -1,0 +1,411 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson LMI                                    SCRIPT
+# ********************************************************************
+#
+# (c) Ericsson LMI 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson LMI. The programs may be used
+# and/or copied only with the written permission from Ericsson LMI or in accordance with
+# the terms and conditions stipulated in the agreement/contract under which the program(s)
+# have been supplied.
+#
+# ********************************************************************
+# Name    : tor_upgrade.bsh
+# Date    : 04/06/2012
+# Revision: R1A01
+# Purpose : TOR upgrade script
+#
+# Usage   : see usage() function
+#
+# ********************************************************************
+
+AWK=/bin/awk
+BASENAME=/bin/basename
+CAT=/bin/cat
+CMW_PARTIAL_BACKUP_LIST=/opt/coremw/bin/cmw-partial-backup-list
+CP=/bin/cp
+DATE=/bin/date
+DIRNAME=/usr/bin/dirname
+ECHO=/bin/echo
+FIND=/bin/find
+GETOPT=/usr/bin/getopt
+GREP=/bin/grep
+HEAD=/usr/bin/head
+LITP=/usr/bin/litp
+MKDIR=/bin/mkdir
+MV=/bin/mv
+PYTHON=/usr/bin/python
+RM=/bin/rm
+SERVICE=/sbin/service
+SSH=/usr/bin/ssh
+TAIL=/usr/bin/tail
+TEE=/usr/bin/tee
+TR=/usr/bin/tr
+YUM=/usr/bin/yum
+WC=/usr/bin/wc
+
+
+
+LANDSCAPED=landscaped
+LAST_KNOWN_CONFIG=/var/lib/landscape/LAST_KNOWN_CONFIG
+BACKUP_LAST_KNOWN_CONFIG_FNAME=PRE_UPGRADE_LAST_KNOWN_CONFIG
+LITP_REPO_LOC=/var/www/html/litp
+STOP_STAGE_FILE=/var/tmp/tor_stop_stage
+
+UPGRADE_PLAN_LITP="litp_upgrade"
+UPGRADE_PLAN_TOR="tor_upgrade"
+UPGRADE_COMPLETED_MARKER=".completed"
+LMS_INV_PATH=/inventory/deployment1/ms1
+
+### Function: setup_env ###
+#
+# Set up the environment for the upgrade
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+setup_env()
+{
+  local _logappend_=$1
+  local _dir_=`${DIRNAME} $0`
+  export SCRIPT_HOME=`cd ${_dir_}/.. 2>/dev/null && pwd || ${ECHO} ${_dir_}`
+  LOGDIR="/var/log/torinst"
+  LOGFILE="${LOGDIR}/tor_upgrade.log"
+  if [ ! -d `${DIRNAME} ${LOGFILE}` ] ; then
+    ${MKDIR} -p `${DIRNAME} ${LOGFILE}`
+  fi
+  if [ ${_logappend_} == 'N' ] && [ -f "${LOGFILE}" ] ; then
+    local _mod_date_=`${DATE} +%Y%m%d_%H%M%S -r "${LOGFILE}"`
+    local _backup_="${LOGFILE%.log}-${_mod_date_}.log"
+    if [ -f "${_backup_}" ]; then  # in case ntp has reset time and log exists
+      _backup_="${LOGFILE%.log}-${_mod_date_}_1.log"
+    fi
+    ${MV} "${LOGFILE}" "${_backup_}"
+  fi
+  ${ECHO} "\${SCRIPT_HOME} set to ${SCRIPT_HOME}" >> ${LOGFILE}
+
+  CURRENT_STAGEFILE="${SCRIPT_HOME}/etc/.tor_upgrade_current_stage"
+  TOR_INI=${SCRIPT_HOME}/etc/tor.ini
+  BACKUP_DIR=${SCRIPT_HOME}/BACKUPS
+  if [ ! -d ${BACKUP_DIR} ] ; then
+    ${MKDIR} -p ${BACKUP_DIR}
+  fi
+  JBOSS_MCAST_RESTORE_SCRIPT=${BACKUP_DIR}/jboss_mast_restore.bsh
+  BACKUP_LAST_KNOWN_CONFIG=${BACKUP_DIR}/${BACKUP_LAST_KNOWN_CONFIG_FNAME}
+	if [ ! -f ${SCRIPT_HOME}/bin/common_functions.lib ] ; then
+		${ECHO} "${SCRIPT_HOME}/bin/common_functions.lib not found" | ${TEE} -a ${LOGFILE}
+		exit 1
+	fi
+	. ${SCRIPT_HOME}/bin/common_functions.lib
+  if [ ! -f ${SCRIPT_HOME}/bin/stage_functions.lib ] ; then
+		${ECHO} "${SCRIPT_HOME}/bin/stage_functions.lib not found" | ${TEE} -a ${LOGFILE}
+		exit 1
+	fi
+	. ${SCRIPT_HOME}/bin/stage_functions.lib
+	if [ $? -ne 0 ] ; then
+	  exit 1
+	fi
+  export PYTHONPATH=${PYTHONPATH}:${SCRIPT_HOME}/lib
+	LITPHELPERPY=${SCRIPT_HOME}/lib/litp/litp_helper.py
+}
+
+
+usage()
+{
+  ${ECHO} "$0 --reset_to_start | --tor_iso <tor_iso> <options> --litp_iso <litp_iso> --litp_sp <litp_servicepack>"
+  ${ECHO} "--reset_to_start : Reset the stages back to the start."
+  ${ECHO} "--current_stage : Show current stage i.e. the stage that would be started if the upgrade was executed again."
+  ${ECHO} "--tor_iso : Full path to TOR ISO"
+  ${ECHO} " <options>"
+  ${ECHO} "  --os_patches : Full path to OS PATCHES"
+  ${ECHO} "  --no_execution : Run through as normal but dont execute the stages."
+  ${ECHO} "  --skip_failed : Pass the --skip-failed flag to LITP plan commands."
+  ${ECHO} "  --append_log : Append to the tor_upgrade log file rather than recreating a new log file."
+  ${ECHO} "  --answers : File containing default answer i.e. command line args"
+  ${ECHO} "  --stage : Only execute this stage"
+  ${ECHO} "  --stop_stage : Stop execution at this stage (stage isnt executed)"
+  ${ECHO} "  --continue : Continue execution from (including) this stage"
+  ${ECHO} "  --skip_stage : skip stages"
+  ${ECHO} "  --N : Dont record the stages as they execute"
+}
+
+########################
+# Main
+########################
+
+if [ $# -eq 0 ] || [ "${1}" == "-h" ] || [ "${1}" == "-help" ]; then
+  usage
+  exit 0
+fi
+
+# Execute getopt
+ARGS=`${GETOPT} -o "xra:l:s:q:c:t:k:p:" \
+  -l "litp_iso:,litp_sp:,current_stage,reset_to_start,no_execution,skip_failed,append_log,restore_lnc,answers:,litp_iso:,stage:,stop_stage:,continue:,tor_iso:,skip_stage:,N,lds,os_patches:" -n "$0" -- "$@"`
+#Bad arguments
+if [ $? -ne 0 ] ; then
+  usage
+  exit 2
+fi
+
+# Set the default values for attributes
+eval set -- "$ARGS"
+ANSWERS=
+APPEND_LOG='N'
+STAGE_LIST=
+CONTINUE_FROM=
+STOP_STAGE=
+TOR_ISO=
+LITP_ISO=
+OS_PATCHES=
+SKIP_STAGES=
+SKIP_FAILED_TASKS=
+NO_STAGE_RECORD=0
+USER_DEFINED_STAGES=0
+DUMMY_EXECUTION=0
+RESET_TO_START=0
+LS_STAGE=0
+LIST_DEFAULT_STAGES=0
+# Now go through all the options
+while true ; do
+  case "$1" in
+    --reset_to_start)
+      RESET_TO_START=1
+      shift
+      ;;
+    --current_stage)
+      LS_STAGE=1
+      break
+      ;;
+    --lds)
+      LIST_DEFAULT_STAGES=1
+      break
+      ;;
+    --no_execution)
+      DUMMY_EXECUTION=1
+      shift
+      ;;
+    --skip_failed)
+      SKIP_FAILED_TASKS="--skip-failed"
+      shift
+      ;;
+    --append_log)
+      APPEND_LOG='Y'
+      shift
+      ;;
+    --tor_iso)
+      TOR_ISO=$2
+      shift 2
+      ;;
+    --litp_iso)
+      LITP_ISO=$2
+      shift 2
+      ;;
+    --litp_sp)
+      LITP_SP=$2
+      shift 2
+      ;;
+    --stage)
+      STAGE_LIST=( ${2} )
+      USER_DEFINED_STAGES=1
+      NO_STAGE_RECORD=1
+      shift 2
+      ;;
+    --stop_stage)
+      STOP_STAGE=${2}
+      shift 2
+      ;;
+    --answers)
+      ANSWERS=${2}
+      shift 2
+      ;;
+    --continue)
+      CONTINUE_FROM=${2}
+      shift 2
+      ;;
+    --os_patches)
+      OS_PATCHES=${2}
+      shift 2
+      ;;
+    --skip_stage)
+      SKIP_STAGES=${2}
+      shift 2
+      ;;
+    --N)
+      NO_STAGE_RECORD=1
+      shift
+      ;;
+    --)
+      shift
+      break;;
+  esac
+done
+setup_env ${APPEND_LOG}
+
+if [ ${LIST_DEFAULT_STAGES} -eq 1 ] ; then
+  _stage_file_=`iniget ${TOR_INI} TOR default_tor_sw_upgrade_stages`
+  if [ $? -ne 0 ] ; then
+    error "${_stage_file_}" | ${TEE} -a ${LOGFILE}
+    exit 1
+  fi
+  _stage_file_=${SCRIPT_HOME}/${_stage_file_}
+  if [ ! -f ${_stage_file_} ] ; then
+    error "Default stage file ${_stage_file_} not found" | ${TEE} -a ${LOGFILE}
+    exit 1
+  fi
+ _stages_=`${CAT} ${_stage_file_}`
+ log "${_stages_}"
+ exit 0
+fi
+
+if [ ${LS_STAGE} -eq 1 ] ; then
+  if [ -f ${CURRENT_STAGEFILE} ] ; then
+    _stage_=`${CAT} ${CURRENT_STAGEFILE}`
+    if [ "${_stage_}" == "${UPGRADE_COMPLETED_MARKER}" ] ; then
+      ${ECHO} "Previous upgrade executed to completion, run '$0 --reset_to_start' to reset stages to start from scratch"
+    else
+      ${ECHO} "Upgrade will continue from stage '${_stage_}'"
+    fi
+  else
+    ${ECHO} "No stage set, upgrade will start at first stage"
+  fi
+  exit 0
+fi
+
+if [ ${RESET_TO_START} -eq 1 ] ; then
+  ${RM} -f ${CURRENT_STAGEFILE}
+  log "Next execution of ${0} will start at first upgrade stage."
+  exit 0
+fi
+
+if [ ${ANSWERS} ] ; then
+  LITP_ISO=`${CAT} ${ANSWERS} | ${GREP} 'litp_iso' | ${AWK} -F= '{print $2}'`
+  if [ ! -f ${LITP_ISO} ] ; then
+    unset LITP_ISO
+  fi
+  TOR_ISO=`${CAT} ${ANSWERS} | ${GREP} 'tor_iso' | ${AWK} -F= '{print $2}'`
+  if [ ! -f ${TOR_ISO} ] ; then
+    unset TOR_ISO
+  fi
+  LITP_ISO=`${CAT} ${ANSWERS} | ${GREP} 'litp_iso' | ${AWK} -F= '{print $2}'`
+  if [ ! -f ${LITP_ISO} ] ; then
+    unset LITP_ISO
+  fi
+  LITP_SP=`${CAT} ${ANSWERS} | ${GREP} 'litp_sp' | ${AWK} -F= '{print $2}'`
+  if [ ! -f ${LITP_SP} ] ; then
+    unset LITP_SP
+  fi
+fi
+
+
+if [ "${STAGE_LIST}" == "" ] ; then
+  if [ -f ${CURRENT_STAGEFILE} ] ; then
+    _last_executed_stage_=`${HEAD} -n 1 ${CURRENT_STAGEFILE}`
+    if [ "${UPGRADE_COMPLETED_MARKER}" == "${_last_executed_stage_}" ] ; then
+      log "Upgrade has already completed." | ${TEE} -a ${LOGFILE}
+      exit 0
+    fi
+    CONTINUE_FROM=${_last_executed_stage_}
+    log "Continuing from stage ${CONTINUE_FROM}" | ${TEE} -a ${LOGFILE}
+  fi
+else
+  CONTINUE_FROM=
+fi
+
+if [ ! ${STAGE_LIST} ] ; then
+  _stage_file_=`iniget ${TOR_INI} TOR default_tor_sw_upgrade_stages`
+  if [ $? -ne 0 ] ; then
+    error "${_stage_file_}" | ${TEE} -a ${LOGFILE}
+    exit 1
+  fi
+  _stage_file_=${SCRIPT_HOME}/${_stage_file_}
+  if [ ! -f ${_stage_file_} ] ; then
+    error "Default stage file ${_stage_file_} not found" | ${TEE} -a ${LOGFILE}
+    exit 1
+  fi
+  STAGE_LIST=()
+  while read _line_ ; do
+    if [[ ${_line_} =~ ^#.* ]] || [[ ${_line_} =~ ^$ ]]; then
+      continue
+    fi
+    if [ ${#STAGE_LIST[@]} -eq 0 ] ; then
+      STAGE_LIST=( "${_line_}" )
+    else
+      STAGE_LIST=( "${STAGE_LIST[@]}" "${_line_}" )
+    fi
+  done < ${_stage_file_}
+  log "Executing default stages." | ${TEE} -a ${LOGFILE}
+fi
+
+_ec_=
+for _stage_ in "${STAGE_LIST[@]}" ; do
+  type -t ${_stage_} > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    error "No stage called '${_stage_}' defined!" | ${TEE} -a ${LOGFILE}
+    _ec_=1
+  fi
+done
+if [ ${_ec_} ] ; then
+  exit ${_ec_}
+fi
+
+_cstage_found_=0
+_stage_index_=0
+while [ ${_stage_index_} -lt ${#STAGE_LIST[@]} ] ; do
+  _stage_=${STAGE_LIST[${_stage_index_}]}
+  ((_stage_index_++))
+  if [ ${_cstage_found_} -eq 0 ] && [ ${CONTINUE_FROM} ] ; then
+    if [ "${_stage_}" != "${CONTINUE_FROM}" ] ; then
+      log "Skipping stage ${_stage_}" | ${TEE} -a ${LOGFILE}
+      continue
+    else
+      _cstage_found_=1
+    fi
+  fi
+  if [ ! ${STOP_STAGE} ] && [ -f ${STOP_STAGE_FILE} ] ; then
+    STOP_STAGE=`${HEAD} -n 1 ${STOP_STAGE_FILE}`
+    warning "Stop stage file ${STOP_STAGE_FILE} found, will stop before executing stage ${STOP_STAGE}" | ${TEE} -a ${LOGFILE}
+    if [ "${STOP_STAGE}" == "stop_now" ] ; then
+      warning "Stopping now (stop_now flag found in ${STOP_STAGE_FILE})" | ${TEE} -a ${LOGFILE}
+      exit 0
+    fi
+  fi
+  if [ ${STOP_STAGE} ] && [ "${STOP_STAGE}" == "${_stage_}" ] ; then
+    warning "Stopping at stage ${_stage_}" | ${TEE} -a ${LOGFILE}
+    exit 0
+  fi
+  stage_enter "${_stage_}" | ${TEE} -a ${LOGFILE}
+  if [ ${NO_STAGE_RECORD} -eq 0 ] ; then
+    ${ECHO} "${_stage_}" > ${CURRENT_STAGEFILE}
+  fi
+  if [ ${DUMMY_EXECUTION} -eq 0 ] ; then
+    ${_stage_} 2>&1 | ${TEE} -a ${LOGFILE}
+    _rc_=${PIPESTATUS[0]}
+    if [ ${_rc_} -eq 19 ] ; then
+      ${ECHO} "**** Exiting the upgrade script for LMS reboot ****"
+      exit 0
+    fi
+    if [ ${_rc_} -ne 0 ] ; then
+      error "Stage '${_stage_}' failed with code ${_rc_}" | ${TEE} -a ${LOGFILE}
+      exit ${_rc_}
+    fi
+  fi
+  stage_exit "${_stage_}" | ${TEE} -a ${LOGFILE}
+  if [ ${NO_STAGE_RECORD} -eq 0 ] ; then
+    _next_stage_=${STAGE_LIST[${_stage_index_}]}
+    if [ ${USER_DEFINED_STAGES} -eq 0 ] ; then
+      if [ ${_stage_index_} -ge ${#STAGE_LIST[@]} ] ; then
+        ${ECHO} "${UPGRADE_COMPLETED_MARKER}" > ${CURRENT_STAGEFILE}
+      else
+        ${ECHO} "${_next_stage_}" > ${CURRENT_STAGEFILE}
+      fi
+    fi
+  fi
+done
+if [ ${USER_DEFINED_STAGES} -eq 1 ] ; then
+  log "User defined stage(s) [${STAGE_LIST[@]}] complete." | ${TEE} -a ${LOGFILE}
+else
+  log "Upgrade complete." | ${TEE} -a ${LOGFILE}
+fi

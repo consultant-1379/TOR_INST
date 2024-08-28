@@ -1,0 +1,62 @@
+<litp:component-def id="logrotate_server_rules">
+    <litp:logrotate-def id="jboss_logs">
+        <compress>true</compress>
+        <copytruncate>true</copytruncate>
+        <create>false</create>
+        <dateext>true</dateext>
+        <dateformat>-%Y%m%d-%s</dateformat>
+        <delaycompress>true</delaycompress>
+        <name>jboss</name>
+        <path>/var/ericsson/log/jboss/*/*.log</path>
+        <rotate>6</rotate>
+        <size>512M</size>
+    </litp:logrotate-def>
+	<litp:logrotate-def id="policy_agent">
+        <compress>true</compress>
+        <copytruncate>true</copytruncate>
+        <create>false</create>
+        <dateext>true</dateext>
+        <dateformat>-%Y%m%d-%s</dateformat>
+        <delaycompress>true</delaycompress>
+        <name>policy_agent</name>
+        <path>/opt/ericsson/sso/web_agents/apache22_agent/Agent*/logs/debug/amAgent</path>
+        <rotate>10</rotate>
+        <size>6M</size>
+    </litp:logrotate-def>
+    <litp:logrotate-def id="syslog">
+        <compress>true</compress>
+        <create>false</create>
+        <dateext>true</dateext>
+        <dateformat>-%Y%m%d-%s</dateformat>
+        <delaycompress>true</delaycompress>
+        <name>syslog</name>
+        <path>/var/log/messages /var/log/secure /var/log/maillog /var/log/spooler /var/log/boot.log /var/log/cron /var/log/iptables.log /var/log/litp.log</path>
+        <postrotate>service rsyslog restart || true</postrotate>
+        <rotate>6</rotate>
+        <sharedscripts>true</sharedscripts>
+        <size>1G</size>
+    </litp:logrotate-def>
+    <litp:logrotate-def id="litp_jboss">
+        <compress>true</compress>
+		<copytruncate>true</copytruncate>
+		<create>false</create>
+        <dateext>true</dateext>
+        <dateformat>-%Y%m%d-%s</dateformat>
+        <delaycompress>true</delaycompress>
+        <name>litp-jboss</name>
+        <path>/var/log/litp/litp_jboss.log</path>
+        <rotate>6</rotate>
+        <size>50M</size>
+    </litp:logrotate-def>
+    <litp:logrotate-def id="httpd">
+        <compress>true</compress>
+        <delaycompress>true</delaycompress>
+        <missingok>true</missingok>
+        <name>httpd</name>
+        <path>/var/log/httpd/*log</path>
+        <postrotate>/sbin/service httpd reload > /dev/null 2>/dev/null || true</postrotate>
+        <rotate>6</rotate>
+        <sharedscripts>true</sharedscripts>
+        <size>100M</size>
+    </litp:logrotate-def>
+</litp:component-def>

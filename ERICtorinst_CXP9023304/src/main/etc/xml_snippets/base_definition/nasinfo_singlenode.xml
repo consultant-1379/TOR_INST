@@ -1,0 +1,38 @@
+<litp:component-def id="nasinfo_singlenode">
+    <litp:nas-service-def id="cluster">
+        <name>sfs_share_cluster</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="data">
+        <name>sfs_share_tor_data</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="ddc_data">
+        <name>sfs_share_ddc_data</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="export_segment1">
+        <name>sfs_share_segment1</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="export_storadm">
+        <name>sfs_share_storadm</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="export_storobs">
+        <name>sfs_share_storobs</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="logstash">
+        <name>sfs_share_logstash</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="no_rollback">
+        <name>sfs_share_tor_no_rollback</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="rsyslog_central">
+        <name>sfs_client_rsyslog</name>
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+</litp:component-def>

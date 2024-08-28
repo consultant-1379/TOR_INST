@@ -1,0 +1,101 @@
+See http://www.saforum.org/HOA/assn16627/images/SAI-AIS-AMF-B.04.01.pdf
+
+Assignment State
+  • UNASSIGNED:
+    a service instance is said to be unassigned if no service unit has the active or quiescing HA state
+    for this service instance.
+  • FULLY_ASSIGNED:
+    A service instance is said to be fully-assigned if and only if
+    • the number of service units having the active or quiescing HA state for the
+      service instance is equal to the preferred number of active assignments for
+      the service instance, which is defined in the redundancy model of the corresponding service group
+    and
+    • the number of service units having the standby HA state for the service
+      instance is equal to the preferred number of standby assignments for the service instance, which is defined in
+      the redundancy model of the corresponding service group
+  • PARTIALLY_ASSIGNED: a configured service instance that is neither unassigned nor
+    fully-assigned is said to be partially-assigned.
+
+Presence State
+  • UNINSTANTIATED
+  • INSTANTIATING
+  • INSTANTIATED
+  • TERMINATING
+  • RESTARTING
+  • INSTANTIATION-FAILED
+  • TERMINATION-FAILED
+
+
+Administrative State
+  • UNLOCKED:
+    The service unit has not been directly prohibited from taking service instance assignments by the administrator.
+  • LOCKED:
+    The administrator has prevented the service unit from taking service instance assignments.
+  • LOCKED-INSTANTIATION:
+    The administrator has prevented the service unit from being instantiated by the Availability Management Framework;
+    the service unit is then not instantiable.
+  • SHUTTING-DOWN:
+    The administrator has prevented the service unit from taking new service instance assignments and requested
+    that existing service instance assignments be gracefully removed.
+    When all service instances assigned to the service unit have finally been removed,
+    its administrative state becomes locked.
+
+
+Operational State
+  • enabled: the operational state of a service unit transitions from disabled to enabled when a successful repair action has been performed on the service unit
+  • disabled: the operational state of a service unit transitions to disabled if a component of the service unit has transitioned to the disabled state and the Availability Management Framework has taken a recovery action at the level of the entire service unit.
+
+Readiness State
+
+  OUT-OF-SERVICE
+    The readiness state of a non-pre-instantiable service unit is out-of-service if  one or more of the following conditions are met:
+      • its operational state or the operational state of its containing node is disabled;
+      • its administrative state or the administrative state of its containing service group, AMF node, application, or the cluster is either locked or lockedinstantiation;
+      • the CLM node to which the containing AMF node is mapped is not a member.
+
+    The readiness state of a pre-instantiable service unit is out-of-service if
+      • any of the preceding conditions that cause a non-pre-instantiable service unit to become out-of-service is true,
+      • or its presence state is neither instantiated nor restarting,
+      • or the service unit contains contained components, and their configured
+      container CSI is not assigned active or quiescing to any container component on the node that contains the service unit.
+
+    When the readiness state of a service unit is out-of-service, no new service
+    instance can be assigned to it. If service instances are already assigned to the
+    service unit at the time when the service unit enters the out-of-service state, they
+    are transferred to other service units (if possible) and removed.
+
+    Note that in some cases, pre-instantiable service units may be instantiated while
+    they are out-of-service. However, non-pre-instantiable service units are terminated when they transition to the
+      out-of-service readiness state.
+
+  IN-SERVICE
+    The readiness state of a non-pre-instantiable service unit is in-service if all of the following conditions are met:
+      • its operational state and the operational state of its containing node is enabled;
+      • its administrative state and the administrative states of its containing service group, AMF node, application, and the cluster are unlocked;
+      • the CLM node to which the containing AMF node is mapped is a member
+
+    The readiness state of a pre-instantiable service unit is in-service if
+      • all of the preceding conditions that cause a non-pre-instantiable service unit to become in-service are true,
+      • and its presence state is either instantiated or restarting,
+      • and the configured container CSI of all contained components of the service unit is assigned active to at least one container component on the
+      node that contains the service unit.
+
+    When a service unit is in the in-service readiness state, it is eligible for service
+    instance assignments; however, it is possible that it has not yet been assigned
+    any service instance.
+
+  STOPPING
+    The readiness state of a service unit is stopping if all of the following conditions  are met:
+      • its operational state and the operational state of its containing node is enabled,
+      • none of the administrative states of itself, the containing service group,
+        AMF node, application, CLM node, or the cluster is locked or locked-instantiation,
+      • at least one of the administrative states of itself, the containing service
+        group, AMF node, application, CLM node, or the cluster is shutting-down,
+        or the container component which is handling the life cycle of contained
+        components of the service unit has the quiescing HA state for the container
+        CSI of the contained components, and the CLM node to which the containing AMF node
+        is mapped is a member node.
+
+    When a service unit is in the stopping state, no service instance can be assigned
+    to it, but already assigned service instances are not removed until the service
+    unit's components indicate to do so.

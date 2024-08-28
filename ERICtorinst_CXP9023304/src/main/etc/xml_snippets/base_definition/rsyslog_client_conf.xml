@@ -1,0 +1,16 @@
+<litp:component-def id="rsyslog_client_conf">
+	<litp:file-def id="rsyslog_client_dir">
+        <ensure>directory</ensure>
+        <path>/etc/rsyslog.d</path>
+    </litp:file-def>
+	<litp:file-def id="rsyslog_client_base_file">
+        <ensure>file</ensure>
+        <path>/etc/rsyslog.d/0_base.conf</path>
+        <source>puppet:///modules/cmw/0_base.conf</source>
+    </litp:file-def>
+	<litp:file-def id="rsyslog_client_file">
+        <ensure>file</ensure>
+        <path>/etc/rsyslog.d/20_rsys_client.conf</path>
+        <source>puppet:///modules/cmw/20_rsys_client.conf</source>
+    </litp:file-def>
+</litp:component-def>

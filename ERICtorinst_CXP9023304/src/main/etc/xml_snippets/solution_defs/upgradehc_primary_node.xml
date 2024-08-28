@@ -1,0 +1,5 @@
+<litp:solution-def id="primary_node">
+  <litp:component-ref id="upgradehc">
+    <component-name>tor_sw/upgradehc</component-name>
+  </litp:component-ref>
+</litp:solution-def>

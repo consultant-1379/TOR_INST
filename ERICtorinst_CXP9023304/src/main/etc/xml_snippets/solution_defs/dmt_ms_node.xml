@@ -1,0 +1,5 @@
+<litp:solution-def id="ms_node">
+  <litp:component-ref id="dmt">
+    <component-name>tor_sw/dmt</component-name>
+  </litp:component-ref>
+</litp:solution-def>

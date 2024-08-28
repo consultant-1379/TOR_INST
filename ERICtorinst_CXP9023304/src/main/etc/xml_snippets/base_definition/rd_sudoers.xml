@@ -1,0 +1,42 @@
+  <litp:component-def id="rd_sudoers">
+    <litp:sudoers-def id="sudo_admin">
+      <cmds>/usr/sbin/useradd,/usr/sbin/userdel,/usr/sbin/groupadd,/usr/sbin/groupdel,/bin/cat,/usr/sbin/litpedit,/bin/sed</cmds>
+      <requirePasswd>FALSE</requirePasswd>
+      <sudorole>ADMIN</sudorole>
+      <users>litp_admin</users>
+    </litp:sudoers-def>
+    <litp:sudoers-def id="sudo_backup">
+      <cmds>/usr/bin/netbackup</cmds>
+      <requirePasswd>TRUE</requirePasswd>
+      <sudorole>BACKUP</sudorole>
+      <users>litp_admin,litp_user</users>
+    </litp:sudoers-def>
+	<litp:sudoers-def id="sudo_hyperic">
+	  <cmds>/opt/hyperic/bin/getSqlAdminPassword.bash,/opt/hyperic/bin/parseTopologySync.bash,/opt/hyperic/bin/getHPOAPassword.bash</cmds>
+	  <requirePasswd>FALSE</requirePasswd>
+	  <sudorole>HYPERIC</sudorole>
+	  <users>hyperic</users>
+	</litp:sudoers-def>
+    <litp:sudoers-def id="sudo_troubleshoot">
+      <cmds>/usr/bin/dig,/usr/bin/host,/usr/sbin/lsof,/usr/bin/ltrace,/usr/bin/sar,/usr/bin/screen,/usr/bin/strace,/usr/sbin/tcpdump,/bin/traceroute,/usr/bin/vim,/sbin/service,/bin/mount,/bin/umount,/usr/bin/virsh,/bin/kill,/sbin/reboot,/sbin/shutdown,/usr/bin/pkill,/sbin/pvdisplay,/sbin/dmsetup,/sbin/multipath,/usr/bin/cobbler,/usr/bin/tail,/sbin/vgdisplay,/sbin/lvdisplay,/bin/rm,/opt/ericsson/nms/litp/litp_landscape/landscape,/usr/bin/which,/sbin/lltconfig,/sbin/gabconfig,/opt/VRTSvcs/bin/hastatus,/opt/VRTSvcs/bin/hacf</cmds>
+      <requirePasswd>TRUE</requirePasswd>
+      <sudorole>TROUBLESHOOT</sudorole>
+      <users>litp_admin</users>
+    </litp:sudoers-def>
+    <litp:sudoers-def id="sudo_verify">
+      <cmds>/sbin/iptables -L</cmds>
+      <requirePasswd>FALSE</requirePasswd>
+      <sudorole>VERIFY</sudorole>
+      <users>litp_verify</users>
+    </litp:sudoers-def>
+    <litp:sudoers-main-def id="sudo_main">
+      <name>sudo_main</name>
+    </litp:sudoers-main-def>
+	<litp:sudoers-def id="sudo_sso_certs">
+      <cmds>/usr/java/default/bin/keytool,/usr/bin/openssl</cmds>
+      <requirePasswd>FALSE</requirePasswd>
+      <sudorole>CERTUPDATE</sudorole>
+      <users>litp_jboss</users>
+    </litp:sudoers-def>
+  </litp:component-def>
+

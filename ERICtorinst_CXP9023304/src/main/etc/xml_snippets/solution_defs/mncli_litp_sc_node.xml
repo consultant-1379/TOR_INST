@@ -1,0 +1,5 @@
+<litp:solution-def id="litp_sc_node">
+  <litp:component-ref id="mncli">
+    <component-name>tor_sw/mncli</component-name>
+  </litp:component-ref>
+</litp:solution-def>

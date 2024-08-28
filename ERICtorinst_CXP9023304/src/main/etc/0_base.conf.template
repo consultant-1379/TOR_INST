@@ -1,0 +1,7 @@
+# This file is included in ERICtorinst
+
+#RSYSLOG_ForwardFormat template is used to enable millisecond-accuracy
+$ActionForwardDefaultTemplate RSYSLOG_ForwardFormat
+
+# set up template for LITP logging
+$template LITP,"%TIMESTAMP:::% %syslogseverity-text% %HOSTNAME% %syslogtag%%msg:::drop-last-lf%\n"

@@ -1,0 +1,46 @@
+  <litp:component-def id="troubleshooting">
+    <litp:package-def id="tool1">
+      <ensure>installed</ensure>
+      <name>sysstat</name>
+    </litp:package-def>
+    <litp:package-def id="tool10">
+      <ensure>installed</ensure>
+      <name>vim-enhanced</name>
+    </litp:package-def>
+    <litp:package-def id="tool11">
+      <ensure>installed</ensure>
+      <name>file</name>
+    </litp:package-def>
+    <litp:package-def id="tool2">
+      <ensure>installed</ensure>
+      <name>procps</name>
+    </litp:package-def>
+    <litp:package-def id="tool3">
+      <ensure>installed</ensure>
+      <name>bind-utils</name>
+    </litp:package-def>
+    <litp:package-def id="tool4">
+      <ensure>installed</ensure>
+      <name>lsof</name>
+    </litp:package-def>
+    <litp:package-def id="tool5">
+      <ensure>installed</ensure>
+      <name>ltrace</name>
+    </litp:package-def>
+    <litp:package-def id="tool6">
+      <ensure>installed</ensure>
+      <name>screen</name>
+    </litp:package-def>
+    <litp:package-def id="tool7">
+      <ensure>installed</ensure>
+      <name>strace</name>
+    </litp:package-def>
+    <litp:package-def id="tool8">
+      <ensure>installed</ensure>
+      <name>tcpdump</name>
+    </litp:package-def>
+    <litp:package-def id="tool9">
+      <ensure>installed</ensure>
+      <name>traceroute</name>
+    </litp:package-def>
+  </litp:component-def>

@@ -1,0 +1,48 @@
+# Drop JBoss local5 before sending messages to central log
+local5.* ~
+
+# Log messages to central
+*.* @[__node1_hostname__]:514
+
+# Log JBoss Application messages to app-specific files, then discard them
+local2.* /var/log/jboss.log
+& ~
+
+# Log IPTables.
+:msg, startswith, "IPTABLES_" -/var/log/iptables.log
+& ~
+
+# Log anything (except mail) of level info or higher.
+# Don't log private authentication messages!
+#*.info;mail.none;authpriv.none;cron.none;kern.!=warning;local6.none; /var/log/messages
+
+*.info;mail.none;authpriv.none;cron.none;local6.none; /var/log/messages;LITP
+
+# all litp logs go to separate file
+# new LITP logging
+local6.info     /var/log/litp.log;LITP
+local6.*     /var/log/litp/litp-debug.log;LITP
+
+# The authpriv file has restricted access. - includes sudoers and func messages
+authpriv.*                                              /var/log/secure
+
+# Log all the mail messages in one place.
+mail.*                                                  -/var/log/maillog
+
+# Log cron stuff
+cron.*                                                  /var/log/cron
+
+# Everybody gets emergency messages
+*.emerg                                                 *
+
+# Save news errors of level crit and higher in a special file.
+uucp,news.crit                                          /var/log/spooler
+
+# Save boot messages also to boot.log
+local7.*                                                /var/log/boot.log
+
+# Write kernel logs (dropped packets) to their own file >>Deprecated
+#kern.warning                                            /var/log/iptables.log
+
+# Drop everything
+*.* ~ 

@@ -1,0 +1,28 @@
+<litp:cluster-def id="cluster1">
+  <litp:service-group-def id="httpd">
+	<availability_model>2n</availability_model>
+	<monitor_interval>10</monitor_interval>
+	<monitor_params>2</monitor_params>
+	<monitor_path>/opt/ericsson/sso/bin/sso-heart-beat.sh</monitor_path>
+	<monitor_timeout>60</monitor_timeout>
+	<node_list>sc1,sc2</node_list>
+	<probe_retries>10</probe_retries>
+	<probe_retry_interval>5</probe_retry_interval>
+	<probe_timeout>60</probe_timeout>
+	<require>SSO</require>
+	<startup_dependency>SSO</startup_dependency>
+	<startup_probe_script>/opt/ericsson/sso/bin/sso-heart-beat.sh</startup_probe_script>
+	<startup_probe_script_args>1</startup_probe_script_args>
+	<version>1.0.1</version>
+    <litp:service-unit-def id="su">
+      <active-count>1</active-count>
+      <version>1.1.1</version>
+      <litp:component-ref id="apache_server">
+        <component-name>tor_sw/apache_server</component-name>
+      </litp:component-ref>
+          <litp:component-ref id="ssologger">
+        <component-name>tor_sw/ssologger</component-name>
+      </litp:component-ref>
+    </litp:service-unit-def>
+  </litp:service-group-def>
+</litp:cluster-def>

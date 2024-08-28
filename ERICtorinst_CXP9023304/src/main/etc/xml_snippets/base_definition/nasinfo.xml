@@ -1,0 +1,33 @@
+<litp:component-def id="nasinfo">
+    <litp:nas-service-def id="cluster">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="data">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="ddc_data">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="export_segment1">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="export_storadm">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="export_storobs">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="logstash">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+	<litp:nas-service-def id="hcdumps">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="no_rollback">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+    <litp:nas-service-def id="rsyslog_central">
+        <options>rw,sync,no_root_squash</options>
+    </litp:nas-service-def>
+</litp:component-def>
+

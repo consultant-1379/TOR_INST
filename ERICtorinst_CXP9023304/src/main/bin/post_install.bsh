@@ -1,0 +1,210 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson Radio Systems AB
+# ********************************************************************
+#
+#
+# (c) Ericsson Radio Systems AB 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson Radio Systems AB, Sweden. The programs may be used
+# and/or copied only with the written permission from Ericsson Radio
+# Systems AB or in accordance with the terms and conditions stipulated
+# in the agreement/contract under which the program(s) have been
+# supplied.
+#
+# ********************************************************************
+# Name    : post_install.bsh
+# Date    : 04/04/2013
+# Revision: R1A01
+# Purpose : Performs general post TOR install steps
+#
+# Usage   : post_install.bsh --sw_base <tor_iso>
+#
+# ********************************************************************
+
+AWK=/bin/awk
+BASENAME=/bin/basename
+CAT=/bin/cat
+CP=/bin/cp
+DATE=/bin/date
+DIRNAME=/usr/bin/dirname
+ECHO=/bin/echo
+GETOPT=/usr/bin/getopt
+LS=/bin/ls
+MKDIR=/bin/mkdir
+MOUNT=/bin/mount
+RM=/bin/rm
+RPM=/bin/rpm
+SED=/bin/sed
+SSH=/usr/bin/ssh
+UMOUNT=/bin/umount
+
+MOUNT_DIR="/var/tmp/tor_iso.$$"
+LOGDIR="/var/log/torinst"
+
+cleanup()
+{
+  if [ -d ${MOUNT_DIR} ] ; then
+    ${UMOUNT} ${MOUNT_DIR} > /dev/null 2>&1
+    ${RM} -rf ${MOUNT_DIR} > /dev/null 2>&1
+  fi
+}
+
+trap "cleanup; exit $?" EXIT
+
+usage()
+{
+  ${ECHO} "$0 --sw_base <tor_iso>"
+  ${ECHO} " Where <tor_iso> is the TOR Sw ISO"
+}
+
+get_absolute_path()
+{
+  _dir_=`${DIRNAME} $0`
+  SCRIPT_HOME=`cd ${_dir_}/../ 2>/dev/null && pwd || ${ECHO} ${_dir_}`
+}
+
+setup_env()
+{
+  get_absolute_path
+  if [ -f ${SCRIPT_HOME}/bin/common_functions.lib ] ; then
+    . ${SCRIPT_HOME}/bin/common_functions.lib
+  else
+    ${ECHO} "${SCRIPT_HOME}/bin/common_functions.lib not found!"
+    exit 2
+  fi
+}
+
+update_selinux_context()
+{
+  echo "Setting up the var_log_t context on /var/ericsson/log on the peer nodes"
+  ssh -o StrictHostKeyChecking=no ${sc1_hostname} "ls -Z /var/ericsson/log" | grep var_log_t >/dev/null
+  if (( $? != 0 )); then
+    ssh ${sc1_hostname} 'semanage fcontext -a  -t var_log_t "/var/ericsson/log(/.*)?"'
+    ssh ${sc1_hostname} 'restorecon -R /var/ericsson/log'
+  else
+    echo "var_log_t already set on ${sc1_hostname}"
+  fi
+
+  ssh -o StrictHostKeyChecking=no ${sc2_hostname} "ls -Z /var/ericsson/log" | grep var_log_t >/dev/null
+  if (( $? != 0 )); then
+    ssh ${sc2_hostname} 'semanage fcontext -a  -t var_log_t "/var/ericsson/log(/.*)?"'
+    ssh ${sc2_hostname} 'restorecon -R /var/ericsson/log'
+  else
+    echo "var_log_t already set on ${sc2_hostname}"
+  fi
+}
+
+update_rsyslog_conf ()
+{ 
+  local _rc_ms_
+  local _rc_sc1_
+  local _rc_sc2_
+  local _10_tcp_queues_client_template_="/opt/ericsson/torinst/etc/10_tcp_queues_client.conf.template"
+  local _10_tcp_queues_server_template_="/opt/ericsson/torinst/etc/10_tcp_queues_server.conf.template"
+  local _10_tcp_queues_client_conf_="/opt/ericsson/torinst/etc/10_tcp_queues_client.conf"
+  local _10_tcp_queues_server_conf_="/opt/ericsson/torinst/etc/10_tcp_queues_server.conf" 
+  local _puppet_cmw_dir_="/opt/ericsson/nms/litp/etc/puppet/modules/cmw/files/"
+  
+  local _node1_hostname_=$(/usr/bin/litp /inventory/deployment1/cluster1/sc1/control_1/os/system show | awk -F\" '/hostname:/ {print $2}')
+  local _logstash_=logstashhost
+  
+  ${CP} ${_10_tcp_queues_client_template_} ${_10_tcp_queues_client_conf_}
+  ${CP} ${_10_tcp_queues_server_template_} ${_10_tcp_queues_server_conf_}
+  ${SED} -i "s/__node1_hostname__/${_node1_hostname_}/g" ${_10_tcp_queues_server_conf_}
+  ${SED} -i "s/%%logstash%%/${_logstash_}/g" ${_10_tcp_queues_client_conf_}
+  ${SED} -i "s/%%logstash%%/${_logstash_}/g" ${_10_tcp_queues_server_conf_}
+  ${MV} ${_10_tcp_queues_client_conf_} ${_puppet_cmw_dir_}/
+  ${MV} ${_10_tcp_queues_server_conf_} ${_puppet_cmw_dir_}/
+  
+  log "Updating rsyslog configuration for logstash tcp queues in definition"
+  /usr/bin/litp /definition/rsyslog_client_conf/rsyslog_client_tcp_file show >/dev/null
+  if (( $? != 0 )); then
+    litp /definition/rsyslog_client_conf/rsyslog_client_tcp_file create file-def
+    litp /definition/rsyslog_client_conf/rsyslog_client_tcp_file update ensure=file path="/etc/rsyslog.d/10_tcp_queues_client.conf" source="puppet:///modules/cmw/10_tcp_queues_client.conf"
+  fi
+  /usr/bin/litp /definition/rsyslog_server_conf/rsyslog_server_tcp_file show >/dev/null
+  if (( $? != 0 )); then
+    litp /definition/rsyslog_server_conf/rsyslog_server_tcp_file create file-def
+    litp /definition/rsyslog_server_conf/rsyslog_server_tcp_file update ensure=file path="/etc/rsyslog.d/10_tcp_queues_server.conf" source="puppet:///modules/cmw/10_tcp_queues_server.conf"
+  fi
+  litp /definition/ materialise
+  log "Configuring and applying inventory"
+  litp /inventory/deployment1/cluster1/sc2/control_2/rsyslog_client_conf configure
+  litp /inventory/deployment1/cluster1/sc1/control_1/rsyslog_server_conf configure
+  litp /inventory/deployment1/ms1/ms_node/rsyslog_client_conf configure
+  litp /cfgmgr/ apply scope=/inventory/deployment1
+  while :; do
+    _rc_sc2_=$(/usr/bin/litp /inventory/deployment1/cluster1/sc2/control_2/rsyslog_client_conf/rsyslog_client_tcp_file show status | ${AWK} -F\" '/status:/ {print $2}')
+    _rc_sc1_=$(/usr/bin/litp /inventory/deployment1/cluster1/sc1/control_1/rsyslog_server_conf/rsyslog_server_tcp_file show status | ${AWK} -F\" '/status:/ {print $2}')
+    _rc_ms_=$(/usr/bin/litp /inventory/deployment1/ms1/ms_node/rsyslog_client_conf/rsyslog_client_tcp_file show status | ${AWK} -F\" '/status:/ {print $2}')
+    [[ ${_rc_sc1_} == "Applied" && ${_rc_ms_} == "Applied" && ${_rc_sc2_} == "Applied" ]] && break
+    log "Rsyslog configuration is being applied. Please wait..."
+    sleep 35
+  done
+  log "Restarting rsyslog service on ms and peer nodes"
+  ${SSH} sc-1 "service rsyslog restart" >/dev/null
+  ${SSH} sc-2 "service rsyslog restart" >/dev/null
+  service rsyslog restart >/dev/null
+  ${CP} /opt/ericsson/torinst/etc/workarounds/rsyslog_client_conf.xml /opt/ericsson/torinst/etc/xml_snippets/base_definition/
+  ${CP} /opt/ericsson/torinst/etc/workarounds/rsyslog_server_conf.xml /opt/ericsson/torinst/etc/xml_snippets/base_definition/
+} 
+
+if [ $# -eq 0 ] ; then
+  usage
+  exit 2
+fi
+ARGS=`${GETOPT} -o "s:" -l "sw_base:" -n "$0" -- "$@"`
+if [ $? -ne 0 ] ; then
+  usage
+  exit 2
+fi
+eval set -- ${ARGS}
+while true ; do
+  case "${1}" in
+    -s | --sw_base)
+      _sw_base_="${2}"
+      shift 2;;
+    --)
+      shift; break;;
+  esac
+done
+
+if [ ! ${_sw_base_} ] ; then
+  usage
+  exit 2
+fi
+setup_env
+
+
+sc1_hostname=$(/usr/bin/litp /inventory/deployment1/cluster1/sc1/control_1/os/system show | grep hostname | awk -F\" '{print $2}')
+sc2_hostname=$(/usr/bin/litp /inventory/deployment1/cluster1/sc2/control_2/os/system show | grep hostname | awk -F\" '{print $2}')
+
+update_rsyslog_conf
+
+update_tor_version ${_sw_base_} 'install'
+update_selinux_context
+
+configure_core_dumps # localhost
+configure_core_dumps $sc1_hostname
+configure_core_dumps $sc2_hostname
+####################################
+####################################
+#Create Application Alerts  TORD-989
+####################################
+####################################
+_create_app_alerts=/opt/hyperic-plugins/scripts/create_app_alerts.sh
+
+if [ -f ${_create_app_alerts} ] ; then
+	rc=$(${_create_app_alerts})
+	if (( $? != 0 )); then
+		${ECHO} "Script ${_create_app_alerts} failed to execute."
+		${ECHO} $rc
+	else
+		${ECHO} "Script ${_create_app_alerts} executed successfully."
+	fi
+else
+	${ECHO} "Script ${_create_app_alerts} does not exist!"
+	${ECHO} "Please create Application Alerts manually"
+fi	

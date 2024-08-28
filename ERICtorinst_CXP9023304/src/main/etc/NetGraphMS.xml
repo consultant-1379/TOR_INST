@@ -1,0 +1,24 @@
+<litp:net-graph-topology xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:litp="http://www.ericsson.com/litp" id="NetGraph" xsi:schemaLocation="http://www.ericsson.com/litp litp.xsd">
+        <require/>
+        <litp:ng-net id="net_TORservices">
+                <children>nic_0</children>
+                <require/>
+        </litp:ng-net>
+        <litp:ng-net id="net_storage">
+                <children>nic_1</children>
+                <require/>
+        </litp:ng-net>
+		<litp:ng-net id="net_backup">
+                <children>nic_2</children>
+                <require/>
+        </litp:ng-net>
+        <litp:ng-nic id="nic_0">
+                <require/>
+        </litp:ng-nic>
+        <litp:ng-nic id="nic_1">
+                <require/>
+        </litp:ng-nic>
+		<litp:ng-nic id="nic_2">
+                <require/>
+        </litp:ng-nic>
+</litp:net-graph-topology>

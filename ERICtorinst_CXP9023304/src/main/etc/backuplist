@@ -1,0 +1,14 @@
+
+# Add the info like this:
+# first column: path for the file or folder you want to backup
+# second column: if backup is wanted to be taken only from few nodes, define the nodes like this this <node1>:<node2>:<node3>
+# the nodes defined in the second column have to be defined in the hostlist
+#
+#
+# example how to fill this file
+# /etc/hosts
+# /var/log/messages sc-1:sc-2
+#
+/var/log/messages
+/var/log/litp/ sc-1:sc-2
+/var/ericsson/log/jboss sc-1:sc-2

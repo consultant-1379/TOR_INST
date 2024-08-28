@@ -1,0 +1,344 @@
+<litp:definition xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:litp="http://www.ericsson.com/litp" xsi:schemaLocation="http://www.ericsson.com/litp litp.xsd" id="definition" version="LITP 1.0.36 CSA 113 068 R1AD">
+    <require></require>
+    <litp:cmw-cluster-config-def id="cmw_cluster_config">
+		<version>R5S01</version>
+        <litp:cmw-campaign-generator-def id="campaign_generator"/>
+        <litp:cmw-etf-generator-def id="etf_generator"/>
+    </litp:cmw-cluster-config-def>
+    <litp:cmw-component-def id="cmw_installer"/>
+    <litp:component-def id="cobbler">
+        <litp:kickstart-manager-def id="ksmanager"/>
+        <litp:cobbler-service-def id="bootservice">
+            <name>bootservice</name>
+        </litp:cobbler-service-def>
+    </litp:component-def>
+    <litp:component-def id="sc_common_dirs"/>
+	<litp:component-def id="rsyslog_server_conf"/>
+	<litp:component-def id="rsyslog_client_conf"/>
+	<litp:component-def id="jboss_data_dir"/>
+	<litp:component-def id="sysctl_params"/>
+	<litp:component-def id="storadmPermission">
+        <litp:file-def id="storadm_file">
+            <owner>storadm</owner>
+            <path>/opt/ericsson/storage</path>
+            <recurse>true</recurse>
+        </litp:file-def>
+    </litp:component-def>
+    <litp:component-def id="dmt">
+        <litp:file-def id="dmt_service">
+            <ensure>directory</ensure>
+            <owner>litp_jboss</owner>
+            <path>/opt/ericsson/dmt_jboss</path>
+            <recurse>true</recurse>
+        </litp:file-def>
+    </litp:component-def>
+    <!--/ericsson dir creation TORD698 -->
+	<litp:component-def id="ms_eridir">
+   <litp:file-def id="ericsson_dir"/>
+   </litp:component-def>
+
+   <litp:component-def id="ddcFile">
+	    <litp:file-def id="ddc_file">
+            <ensure>directory</ensure>
+            <path>/var/ericsson</path>
+        </litp:file-def>
+	</litp:component-def>
+    <litp:component-def id="hyperica">
+        <litp:hyperic-agent-def id="hyagent"/>
+    </litp:component-def>
+    <litp:component-def id="hyperics">
+        <litp:hyperic-server-def id="hyserver"/>
+    </litp:component-def>
+    <litp:component-def id="jee_containers"/>
+    <litp:component-def id="logrotate_litp"/>
+    <litp:component-def id="logrotate_rules"/>
+    <litp:component-def id="logrotate_server_rules"/>
+	<litp:component-def id="logrotate_central_rules"/>
+    <litp:component-def id="mysqlserver">
+        <litp:mysql-server-def id="config"/>
+    </litp:component-def>
+    <litp:component-def id="nasinfo"/>
+    <litp:component-def id="rd_rsyslog_client">
+        <litp:rsyslog-client-def id="rsyslog_client">
+            <rlCentralHost>DUMMY</rlCentralHost>
+		</litp:rsyslog-client-def>
+    </litp:component-def>
+    <litp:component-def id="rd_rsyslog_server">
+        <litp:rsyslog-server-def id="rsyslog_server">
+            <rlCentralHost>DUMMY</rlCentralHost>
+        </litp:rsyslog-server-def>
+    </litp:component-def>
+    <litp:component-def id="rd_sudoers"/>
+    <litp:component-def id="rd_users"/>
+    <litp:component-def id="sfs_client"/>
+    <litp:component-def id="sfs_client_homedirs"/>
+    <litp:component-def id="sfs_client_rsyslog"/>
+    <litp:component-def id="tor_sw"/>
+    <litp:component-def id="troubleshooting"/>
+    <litp:lde-component-def id="lde">
+        <litp:tipc-address-def id="tipc">
+            <pool>tipc</pool>
+        </litp:tipc-address-def>
+    </litp:lde-component-def>
+    <litp:rhel-component-def id="os">
+        <profile>linux</profile>
+        <litp:rhel-component-def id="osms">
+            <profile>node-iso-x86_64</profile>
+            <litp:generic-system-def id="system">
+                <pool>systems</pool>
+            </litp:generic-system-def>
+            <litp:kickstart-def id="ks"/>
+            <litp:ntp-client-def id="ntp1">
+                <service>ntp_1</service>
+            </litp:ntp-client-def>
+        </litp:rhel-component-def>
+        <litp:rhel-component-def id="ossc">
+            <profile>node-iso-x86_64</profile>
+            <litp:generic-system-def id="system">
+                <pool>systems</pool>
+            </litp:generic-system-def>
+            <litp:kickstart-def id="ks"/>
+            <litp:ntp-client-def id="ntp1">
+                <service>ntp_1</service>
+            </litp:ntp-client-def>
+            <litp:ntp-service-def id="ntp_l2">
+                <name>ntp_l2</name>
+            </litp:ntp-service-def>
+        </litp:rhel-component-def>
+        <litp:rhel-component-def id="ossfs">
+            <profile>node-iso-x86_64</profile>
+            <litp:generic-system-def id="system">
+                <pool>systems</pool>
+            </litp:generic-system-def>
+        </litp:rhel-component-def>
+        <litp:rhel-component-def id="rhel">
+            <profile>node-iso-x86_64</profile>
+        </litp:rhel-component-def>
+        <litp:ip-address-def id="ip"/>
+    </litp:rhel-component-def>
+    <litp:vcs-cluster-config-def id="vcs_config"/>
+    <litp:vcs-component-def id="vcsr"/>
+    <litp:deployment-def id="deployment1">
+        <litp:cluster-def id="cluster1">
+            <litp:component-ref id="cmw_cluster_config">
+                <component-name>cmw_cluster_config</component-name>
+            </litp:component-ref>
+            <litp:component-ref id="cmw_installer">
+                <component-name>cmw_installer</component-name>
+            </litp:component-ref>
+            <litp:component-ref id="vcs_config">
+                <component-name>vcs_config</component-name>
+            </litp:component-ref>
+            <litp:node-def id="sc1">
+                <nodetype>control</nodetype>
+                <primarynode>true</primarynode>
+                <litp:component-ref id="sc_common_dirs">
+                    <component-name>sc_common_dirs</component-name>
+                </litp:component-ref>
+                <litp:component-ref id="storadm_file">
+                    <component-name>storadmPermission</component-name>
+                </litp:component-ref>
+		<!--/ericsson dir creation TORD698 -->
+				<litp:component-ref id="eridir">
+                <component-name>ms_eridir</component-name>
+            </litp:component-ref>
+                <litp:component-ref id="vcsr">
+                    <component-name>vcsr</component-name>
+                </litp:component-ref>
+                <litp:solution-ref id="control_1">
+                    <solution-name>primary_node</solution-name>
+                </litp:solution-ref>
+            </litp:node-def>
+            <litp:node-def id="sc2">
+                <nodetype>control</nodetype>
+                <litp:component-ref id="sc_common_dirs">
+                    <component-name>sc_common_dirs</component-name>
+                </litp:component-ref>
+                <litp:component-ref id="storadm_file">
+                    <component-name>storadmPermission</component-name>
+                </litp:component-ref>
+		<!--/ericsson dir creation TORD698 -->
+				<litp:component-ref id="eridir">
+                <component-name>ms_eridir</component-name>
+            </litp:component-ref>
+                <litp:component-ref id="vcsr">
+                    <component-name>vcsr</component-name>
+                </litp:component-ref>
+                <litp:solution-ref id="control_2">
+                    <solution-name>litp_sc_node</solution-name>
+                </litp:solution-ref>
+            </litp:node-def>
+        </litp:cluster-def>
+        <litp:node-def id="ms1">
+            <nodetype>management</nodetype>
+            <litp:component-ref id="storadm_file">
+                <component-name>storadmPermission</component-name>
+            </litp:component-ref>
+			<litp:component-ref id="ddc_file">
+                <component-name>ddcFile</component-name>
+            </litp:component-ref>
+			<!--/ericsson dir creation -->
+			<litp:component-ref id="eridir">
+                <component-name>ms_eridir</component-name>
+            </litp:component-ref>
+            <litp:component-ref id="dmt_service">
+                <component-name>dmt</component-name>
+            </litp:component-ref>
+            <litp:solution-ref id="ms_node">
+                <solution-name>ms_node</solution-name>
+            </litp:solution-ref>
+        </litp:node-def>
+        <litp:ntp-service-def id="ntp_1">
+            <external>True</external>
+            <name>ntp_1</name>
+        </litp:ntp-service-def>
+    </litp:deployment-def>
+    <litp:svc-alias-ctrl-def id="alias_controller"/>
+    <litp:solution-def id="litp_sc_node">
+        <description>litp_sc_nodev1</description>
+        <name>litpscnodev1</name>
+        <solution_type>BASIC</solution_type>
+        <version>1.1.1</version>
+        <litp:component-ref id="hypericagent">
+            <component-name>hyperica</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="lde">
+            <component-name>lde</component-name>
+        </litp:component-ref>
+		<litp:component-ref id="rsyslog_client_conf">
+            <component-name>rsyslog_client_conf</component-name>
+        </litp:component-ref>
+		<litp:component-ref id="jboss_data_dir">
+            <component-name>jboss_data_dir</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sysctl_params">
+        	<component-name>sysctl_params</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="logrotate_server_rules">
+            <component-name>logrotate_server_rules</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="os">
+            <component-name>os/ossc</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="rd_sudoers">
+            <component-name>rd_sudoers</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sfs">
+            <component-name>sfs_client</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sfs_homedir">
+            <component-name>sfs_client_homedirs</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sfs_rsyslog">
+            <component-name>sfs_client_rsyslog</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="syslog">
+            <component-name>rd_rsyslog_client</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="troubleshooting">
+            <component-name>troubleshooting</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="users">
+            <component-name>rd_users</component-name>
+        </litp:component-ref>
+    </litp:solution-def>
+    <litp:solution-def id="ms_node">
+        <description>msnodev1</description>
+        <name>msnodev1</name>
+        <solution_type>BASIC</solution_type>
+        <version>1.1.1</version>
+        <litp:component-ref id="hypericagent">
+            <component-name>hyperica</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="hypericserver">
+            <component-name>hyperics</component-name>
+        </litp:component-ref>
+		<litp:component-ref id="rsyslog_client_conf">
+            <component-name>rsyslog_client_conf</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="logrotate_litp">
+            <component-name>logrotate_litp</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="logrotate_rules">
+            <component-name>logrotate_rules</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="ms_boot">
+            <component-name>cobbler</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="mysqlserver">
+            <component-name>mysqlserver</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="os">
+            <component-name>os/osms</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="rd_sudoers">
+            <component-name>rd_sudoers</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sfs">
+            <component-name>nasinfo</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sfs_homedir">
+            <component-name>sfs_client_homedirs</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="syslog">
+            <component-name>rd_rsyslog_client</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="troubleshooting">
+            <component-name>troubleshooting</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="users">
+            <component-name>rd_users</component-name>
+        </litp:component-ref>
+    </litp:solution-def>
+    <litp:solution-def id="primary_node">
+        <description>primarynodev1</description>
+        <name>primarynodev1</name>
+        <solution_type>BASIC</solution_type>
+        <version>1.1.1</version>
+        <litp:component-ref id="hypericagent">
+            <component-name>hyperica</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="lde">
+            <component-name>lde</component-name>
+        </litp:component-ref>
+		<litp:component-ref id="rsyslog_server_conf">
+            <component-name>rsyslog_server_conf</component-name>
+        </litp:component-ref>
+		<litp:component-ref id="jboss_data_dir">
+            <component-name>jboss_data_dir</component-name>
+        </litp:component-ref>
+		<litp:component-ref id="sysctl_params">
+        	<component-name>sysctl_params</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="logrotate_server_rules">
+            <component-name>logrotate_server_rules</component-name>
+        </litp:component-ref>
+		<litp:component-ref id="logrotate_central_rules">
+            <component-name>logrotate_central_rules</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="os">
+            <component-name>os/ossc</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="rd_sudoers">
+            <component-name>rd_sudoers</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sfs">
+            <component-name>sfs_client</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sfs_homedir">
+            <component-name>sfs_client_homedirs</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="sfs_rsyslog">
+            <component-name>sfs_client_rsyslog</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="syslog_central">
+            <component-name>rd_rsyslog_server</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="troubleshooting">
+            <component-name>troubleshooting</component-name>
+        </litp:component-ref>
+        <litp:component-ref id="users">
+            <component-name>rd_users</component-name>
+        </litp:component-ref>
+    </litp:solution-def>
+</litp:definition>

@@ -1,0 +1,37 @@
+<tor_sw>
+  <litp:component-def id="fmserv">
+    <litp:deployable-entity-def id="de">
+      <app-type/>
+      <install-source/>
+      <name/>
+      <service>jboss_FMPMServ</service>
+      <version/>
+      <litp:jms-queue-def id="event_based_mediation_client_q">
+        <jndi>EventBasedMediationClient</jndi>
+        <name>queue/MediationClientConsumerQueue,java:jboss/exported/jms/queue/MediationClientConsumerQueue</name>
+      </litp:jms-queue-def>
+	  <litp:jms-queue-def id="jms_mediation_task_queue_0">
+		<jndi>FmMediationtaskQueue0</jndi>
+		<name>queue/FmMediationtaskQueue_0,java:jboss/exported/jms/queue/FmMediationtaskQueue_0</name>
+	  </litp:jms-queue-def>
+	  <litp:jms-queue-def id="jms_mediation_task_queue_1">
+		<jndi>FmMediationtaskQueue1</jndi>
+		<name>queue/FmMediationtaskQueue_1,java:jboss/exported/jms/queue/FmMediationtaskQueue_1</name>
+	  </litp:jms-queue-def>
+	  <litp:jms-topic-def id="fm_mediation_channel_t">
+		<jndi>FMMediationChannel</jndi>
+		<name>topic/fmalarmtopic,java:jboss/exported/jms/topic/fmalarmtopic</name>
+	  </litp:jms-topic-def>
+	  <litp:jms-topic-def id="fm_handovertopic_t">
+        <jndi>FMHandoverTopic</jndi>
+        <name>topic/handovertopic,java:jboss/exported/jms/topic/handovertopic</name>
+      </litp:jms-topic-def>
+    </litp:deployable-entity-def>
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICFMService_CXP9030213</name>
+	  <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

@@ -1,0 +1,17 @@
+<tor_sw>
+  <litp:component-def id="camel">
+    <litp:deployable-entity-def id="de">
+      <app-type/>
+      <install-source/>
+      <name/>
+      <service>jboss_FMPMMS</service>
+      <version/>
+    </litp:deployable-entity-def>
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICcamel_CXP9030311</name>
+      <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

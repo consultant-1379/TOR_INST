@@ -1,0 +1,61 @@
+<tor_sw>
+  <litp:component-def id="medcore">
+    <litp:deployable-entity-def id="de">
+      <app-type/>
+      <install-source/>
+      <name/>
+      <service>jboss_MCUI</service>
+      <version/>
+      <litp:jms-queue-def id="jms_res_q">
+        <jndi>MediationResponseResultHandler</jndi>
+        <name>queue/MediationResponseQueue,java:jboss/exported/jms/queue/MediationResponseQueue</name>
+      </litp:jms-queue-def>
+	  	  <litp:jms-queue-def id="jms_fail_q">
+        <jndi>MediationFailureResponseResultHandler</jndi>
+        <name>queue/MediationFailureResponseQueue,java:jboss/exported/jms/queue/MediationFailureResponseQueue</name>
+      </litp:jms-queue-def>
+	  <litp:jms-queue-def id="jms_serv_reg_q">
+        <jndi>MediationServiceRegistry</jndi>
+        <name>queue/MediationServiceRegistryQueue,java:jboss/exported/jms/queue/MediationServiceRegistryQueue</name>
+      </litp:jms-queue-def>
+      <litp:jms-queue-def id="jms_cli_cons_q">
+        <jndi>EventBasedMediationClient</jndi>
+        <name>queue/MediationClientConsumerQueue,java:jboss/exported/jms/queue/MediationClientConsumerQueue</name>
+      </litp:jms-queue-def>
+	  <litp:jms-queue-def id="mediation_service_cons_queue">
+        <jndi>MediationServiceConsumer</jndi>
+        <name>queue/MediationServiceConsumerQueue,java:jboss/exported/jms/queue/MediationServiceConsumerQueue</name>
+      </litp:jms-queue-def>
+	  <litp:jms-queue-def id="jms_mediation_service_cons_queue_0">
+        <jndi>MediationServiceConsumer0</jndi>
+        <name>queue/FmMediationServiceConsumer_0,java:jboss/exported/jms/queue/FmMediationServiceConsumer_0</name>
+      </litp:jms-queue-def>
+      <litp:jms-queue-def id="jms_mediation_service_cons_queue_1">
+        <jndi>MediationServiceConsumer1</jndi>
+        <name>queue/FmMediationServiceConsumer_1,java:jboss/exported/jms/queue/FmMediationServiceConsumer_1</name>
+      </litp:jms-queue-def>
+	  <litp:jms-queue-def id="jms_mediation_task_queue_0">
+		<jndi>FmMediationtaskQueue0</jndi>
+		<name>queue/FmMediationtaskQueue_0,java:jboss/exported/jms/queue/FmMediationtaskQueue_0</name>
+	  </litp:jms-queue-def>
+	  <litp:jms-queue-def id="jms_mediation_task_queue_1">
+		<jndi>FmMediationtaskQueue1</jndi>
+		<name>queue/FmMediationtaskQueue_1,java:jboss/exported/jms/queue/FmMediationtaskQueue_1</name>
+	  </litp:jms-queue-def>
+	  <litp:jms-topic-def id="jms_task_err_handler_t">
+        <jndi>MediationTaskErrorHandler</jndi>
+        <name>topic/MediationTaskErrorTopic,java:jboss/exported/jms/topic/MediationTaskErrorTopic</name>
+      </litp:jms-topic-def>
+	  <litp:jms-topic-def id="fm_handovertopic_t">
+        <jndi>FMHandoverTopic</jndi>
+        <name>topic/handovertopic,java:jboss/exported/jms/topic/handovertopic</name>
+      </litp:jms-topic-def>
+    </litp:deployable-entity-def>
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICpmmedcore_CXP9030102</name>
+	  <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

@@ -1,0 +1,1346 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson Radio Systems AB
+# ********************************************************************
+#
+#
+# (c) Ericsson Radio Systems AB 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson Radio Systems AB, Sweden. The programs may be used
+# and/or copied only with the written permission from Ericsson Radio
+# Systems AB or in accordance with the terms and conditions stipulated
+# in the agreement/contract under which the program(s) have been
+# supplied.
+#
+# ********************************************************************
+# Name    : common_functions.lib
+# Date    : 04/06/2013
+# Revision: R1A03
+# Purpose : TOR Inst common functions
+#
+# Usage   : None
+#
+# ********************************************************************
+
+AWK=/bin/awk
+BASENAME=/bin/basename
+CAT=/bin/cat
+CUT=/bin/cut
+DATE=/bin/date
+DIRNAME=/usr/bin/dirname
+ECHO=/bin/echo
+FILE=/usr/bin/file
+FIND=/bin/find
+GREP=/bin/grep
+LITP=/usr/bin/litp
+LN=/bin/ln
+LS=/bin/ls
+MKDIR=/bin/mkdir
+MOUNT=/bin/mount
+MV=/bin/mv
+CP=/bin/cp
+PUPPET=/usr/bin/puppet
+PYTHON=/usr/bin/python
+RM=/bin/rm
+RPM=/bin/rpm
+SERVICE=/sbin/service
+SSH=/usr/bin/ssh
+TAIL=/usr/bin/tail
+TEE=/usr/bin/tee
+TR=/usr/bin/tr
+UMOUNT=/bin/umount
+
+RETURN_OK=0
+RETURN_ERROR=1
+EXIT_OK=0
+EXIT_ERROR=1
+EXIT_FNF=2
+EXIT_KNF=5
+EXIT_VND=6
+
+
+
+LANDSCAPED=landscaped
+
+VERSION_FILE="/opt/ericsson/torinst/.tor_version"
+CLUSTER_PATH="/inventory/deployment1/cluster1"
+LMS_INV_BASE_PATH=/inventory/deployment1/ms1
+CTRL1_INV_BASE_PATH=/inventory/deployment1/cluster1/sc1
+CTRL2_INV_BASE_PATH=/inventory/deployment1/cluster1/sc2
+
+LMS_INV_PATH=${LMS_INV_BASE_PATH}/ms_node
+CTRL1_INV_PATH=${CTRL1_INV_BASE_PATH}/control_1
+CTRL2_INV_PATH=${CTRL2_INV_BASE_PATH}/control_2
+
+if [ ! ${SCRIPT_HOME} ] ; then
+	${ECHO} "\${SCRIPT_HOME} not set"
+	exit 1
+fi
+if [ ${LOGFILE} ] ; then
+  ${ECHO} "Logging to ${LOGFILE}" | ${TEE} -a ${LOGFILE}
+fi
+
+INIPY=${SCRIPT_HOME}/lib/ini.py
+LITPHELPERPY=${SCRIPT_HOME}/lib/litp/litp_helper.py
+TOR_INI=${SCRIPT_HOME}/etc/tor.ini
+
+litp()
+{
+  local _rc_
+  log "litp $*"
+  ${LITP} "$@" 2>&1
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    exit ${_rc_}
+  fi
+}
+
+create_path()
+{
+  local _path_=$1
+  if [ $# -eq 2 ] ; then
+    _type_=$2
+  else
+    _type_="component-def"
+  fi
+  ${LITP} ${_path_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    litp ${_path_} create ${_type_}
+  fi
+}
+
+
+### Function: get_tor_version_file ###
+#
+#  Get the TOR version info
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+get_tor_version_file()
+{
+  ${ECHO} ${VERSION_FILE}
+  return ${RETURN_OK}
+}
+
+### Function: get_controller_list ###
+#
+#  Get a list of control node path in the landscape
+#
+# Arguments:
+#       None
+# Return Values:
+#       List of control node paths currently defined in the landscape model
+get_controller_list()
+{
+  local _node_list_=()
+  for _node_ in `${LITP} ${CLUSTER_PATH} show -l` ; do
+    ${LITP} "${CLUSTER_PATH}/${_node_}" show -d | ${GREP} -E 'class: "LitpNode"' > /dev/null
+    if [ $? -eq 0 ] ; then
+      if [ ${#_node_list_[@]} -eq 0 ] ; then
+        _node_list_=( "${CLUSTER_PATH}/${_node_}" )
+      else
+        _node_list_=( "${_node_list_[@]}" "${CLUSTER_PATH}/${_node_}" )
+      fi
+#      _node_list_=( "${_node_list_[*]}" "${CLUSTER_PATH}/${_node_}" )
+    fi
+  done
+  ${ECHO} "${_node_list_[*]}"
+  return ${RETURN_OK}
+}
+
+### Function: get_property_value ###
+#
+#  Get an attribute value from the landscape model
+#
+# Arguments:
+#       $1 - The landscape path
+#       $2 - The property name
+# Return Values:
+#       The property value
+get_property_value()
+{
+  local _ls_path_=$1
+  local _attname_=$2
+  _kvp_=`${LITP} ${_ls_path_} show 2>&1`
+  _rc_=$?
+  if [ $_rc_ -ne 0 ] ; then
+    ${ECHO} "${_kvp_}"
+    return ${RETURN_ERROR}
+  fi
+  _kvp_=`${ECHO} "${_kvp_}" | ${GREP} -E "${_attname_}:.*"`
+  _rc_=$?
+  if [ $_rc_ -ne 0 ] ; then
+    ${ECHO} "Attribute '${_attname_}' not found at ${_ls_path_}"
+    return ${RETURN_ERROR}
+  fi
+  ${ECHO} "${_kvp_}" | ${AWK} -F\" '{print $2}'
+  return ${RETURN_OK}
+}
+
+### Function: dos2unix ###
+#
+# Run a dos2unix conversion on an input file
+#
+# Arguments:
+#       $1 - The file to remove the dos characters from
+# Return Values:
+#       None
+dos2unix()
+{
+  _file_=$1
+  if [ ! -f ${_file_} ] ; then
+    ${ECHO} "dos2unix: input file ${_file_} not found"
+    exit ${EXIT_ERROR}
+  fi
+  ${CAT} ${_file_} | ${TR} -d '\015' >${_file_}.$$
+  if [ $? -ne 0 ] ; then
+    ${ECHO} "dos2unix failed"
+    ${RM} -rf ${_file_}.$$
+    exit ${EXIT_ERROR}
+  fi
+  ${MV} ${_file_}.$$ ${_file_}
+  if [ $? -ne 0 ] ; then
+    ${ECHO} "dos2unix: failed to move temp file to original"
+    exit ${EXIT_ERROR}
+  fi
+  return ${RETURN_OK}
+}
+
+### Function: get_sitedata_value ###
+#
+# Get the value of a key from the input file
+#
+# Arguments:
+#       $1 - The site data file ( a key=value pair file)
+#       $2 - The key name
+# Return Values:
+#       The value of the key
+get_sitedata_value()
+{
+  local _sitefile_=$1
+  local _key_=$2
+  if [ ! -f ${_sitefile_} ] ; then
+    ${ECHO} "ERROR:${_sitefile_} not found"
+    exit ${EXIT_FNF}
+  fi
+  _kvp_=`${GREP} -E "^${_key_}=" ${_sitefile_}`
+  if [ $? -ne 0 ] ; then
+    ${ECHO} "ERROR:${_kvp_}"
+    exit ${EXIT_KNF}
+  fi
+  _value_=`${ECHO} "${_kvp_}" | ${CUT} -d'=' -f2-`
+  if [ $? -ne 0 ] ; then
+    ${ECHO} "ERROR:${_kvp_}"
+    exit ${EXIT_ERROR}
+  fi
+  if [ "${_value_}" == "" ] ; then
+    ${ECHO} "No value for key '${_key_}' found in ${_sitefile_}"
+    exit ${EXIT_VND}
+  fi
+  ${ECHO} "${_value_}"
+  return ${RETURN_OK}
+}
+
+### Function: get_address ###
+#
+# Get the IP address for a contol/payload/management node
+#
+# Arguments:
+#       $1 - The base noe path in landscape
+# Return Values:
+#       IP address assigned to node
+get_address()
+{
+  if [ $# -eq 0 ] ; then
+    error "No peer path specified"
+    exit ${EXIT_ERROR}
+  fi
+  local _peerpath_=$1
+  ${LITP} ${_peerpath_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    error "Path ${_peerpath_} not found!"
+    exit ${EXIT_ERROR}
+  fi
+  local _ippath_
+  _ippath_=`${LITP} ${_peerpath_} find --name ip | ${GREP} -vE "^$"`
+  if [ $? -ne 0 ] ; then
+    error "No IP defined under ${_peerpath_}"
+    exit ${EXIT_ERROR}
+  fi
+  local _address_
+  _address_=`get_property_value ${_ippath_} "address"`
+  if [ $? -ne 0 ] ; then
+    error "${_address_}"
+    exit ${EXIT_ERROR}
+  fi
+  ${ECHO} "${_address_}"
+}
+
+###Function: create_fwrule ###
+#
+# Creates a firewall rule
+#
+# Arguments:
+#       $1 - The base path in landscape for the firewall rule convention is fw_
+#       $2 - Name shows as a comment but usually begins wit a number between 1 and 99 as LITP uses it for ordering
+#       $3 - Port to which the rule is applied to
+#       $4 - Protocol to which the rule applies default is tcp
+#       $5 - Provider as in ipv4 or ipv6 if none selected applies to both
+#       $6 - Action default is allow if set to drop does not log dropped packets on this port
+#       $7 - source ip that the packet is sent from
+#
+# Return Values:
+#       none
+create_fwrule()
+{
+  local _path_=$1
+  local _name_=$2
+  local _dport_=$3
+  local _proto_=$4
+  local _provider_=$5
+  local _action_=$6
+  local _source_=$7
+
+  ${LITP} ${_path_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    litp ${_path_} create firewalls-def
+  fi
+  litp ${_path_} update name="${_name_}"
+  if [ "${_dport_}" != "none" ] ; then
+    litp ${_path_} update dport="${_dport_}"
+  fi
+  if [ "${_proto_}" != "none" ] ; then
+    litp ${_path_} update proto="${_proto_}"
+  fi
+  if [ "${_provider_}" != "none" ] ; then
+    litp ${_path_} update provider="${_provider_}"
+  fi
+  if [ "${_action_}" != "none" ] ; then
+    litp ${_path_} update action="${_action_}"
+  fi
+  if [ "${_source_}" != "none" ] ; then
+    litp ${_path_} update source="${_source_}"
+  fi
+}
+
+### Function: _date ###
+#
+# Get a date string for trace messages
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+_date()
+{
+  ${DATE} '+%Y-%b-%d_%H.%M.%S'
+}
+
+### Function: _trace ###
+#
+# Trace a message. Not to be used directly, use log|error|warning.
+#
+# Arguments:
+#       $1 - Message to trace
+# Return Values:
+#       None
+_trace()
+{
+  local _type_=$1
+  local _tracemsg_=$2
+  local _date_=`_date`
+  local _msg_="${_date_} - ${_type_} : ${_tracemsg_}"
+#  if [ ${LOGFILE} ] ; then
+#    ${ECHO} "${_msg_}" | ${TEE} -a ${LOGFILE}
+#  else
+#    ${ECHO} "${_msg_}"
+#  fi
+  ${ECHO} "${_msg_}"
+}
+
+### Function: error ###
+#
+# Error to log.
+#
+# Arguments:
+#       $1 - Error to trace
+# Return Values:
+#       None
+error()
+{
+  _trace "ERROR" "${*}"
+}
+
+### Function: log ###
+#
+# Log a message.
+#
+# Arguments:
+#       $1 - Message to log
+# Return Values:
+#       None
+log()
+{
+  _trace "LOG" "${*}"
+}
+
+### Function: warning ###
+#
+# Log a warning.
+#
+# Arguments:
+#       $1 - Message to log
+# Return Values:
+#       None
+warning()
+{
+  _trace "WARNING" "${*}"
+}
+
+### Function: stage_enter ###
+#
+# Log entering a stage i.e. just before it's executed
+#
+# Arguments:
+#       $1 - The stage name
+# Return Values:
+#       None
+stage_enter()
+{
+  local _stage_=$1
+  _trace "STAGE_ENTER" "-----------------------------------------------------"
+  _trace "STAGE_ENTER" "Entering stage - ${_stage_}"
+  _trace "STAGE_ENTER" "-----------------------------------------------------"
+}
+
+### Function: stage_exit ###
+#
+# Log exiting a stage i.e. just after it's execution
+#
+# Arguments:
+#       $1 - The stage name
+# Return Values:
+#       None
+stage_exit()
+{
+  local _stage_=$1
+  _trace "STAGE_EXIT" "-----------------------------------------------------"
+  _trace "STAGE_EXIT" "Exiting stage - ${_stage_}"
+  _trace "STAGE_EXIT" "-----------------------------------------------------"
+}
+
+### Function: allocate_all_nodes ###
+#
+# Allocate all nodes in cluster i.e. LMS & peers
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+allocate_all_nodes()
+{
+  allocate ${LMS_INV_PATH}
+  allocate /inventory/deployment1
+}
+
+### Function: allocate ###
+#
+# Allocate a path in the landscape tree
+#
+# Arguments:
+#       $1 - The path to allocate
+# Return Values:
+#       None
+allocate()
+{
+  if [ $# -eq 0 ] ; then
+    error "No path to allocate (\$1)"
+    exit 1
+  fi
+  litp ${1} allocate
+}
+
+### Function: configure ###
+#
+# Configure a path in the landscape tree
+#
+# Arguments:
+#       $1 - The path to allocate (Optional, defaults to /inventory/deployment1)
+# Return Values:
+#       None
+configure()
+{
+  local _path_=/inventory/deployment1
+  if [ $# -eq 1 ] ; then
+    _path_=$1
+  fi
+  litp ${_path_} configure
+}
+
+### Function: validate ###
+#
+# Validate a path in the landscape tree
+#
+# Arguments:
+#       $1 - The path to validate (Optional, defaults to /inventory)
+# Return Values:
+#       None
+validate()
+{
+  local _path_=/inventory
+  if [ $# -eq 1 ] ; then
+    _path_=$1
+  fi
+  litp ${_path_} validate
+}
+
+### Function: apply ###
+#
+# Apply a path in the landscape tree
+#
+# Arguments:
+#       $1 - The path to apply (Optional, defaults to /inventory)
+# Return Values:
+#       None
+apply()
+{
+  local _path_=/inventory
+  if [ $# -eq 1 ] ; then
+    _path_=$1
+  fi
+  litp /cfgmgr apply scope=${_path_}
+  ${SERVICE} puppet restart
+  ${PUPPET} kick > /dev/null 2>&1
+}
+
+### Function: apply_inventory ###
+#
+# Apply changes from /inventory
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+apply_inventory()
+{
+  apply
+}
+
+### Function: materialise ###
+#
+# Materialise definition objects (Optional, defaults to /definition)
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+materialise()
+{
+  local _path_=/definition
+  if [ $# -eq 1 ] ; then
+    _path_=${1}
+  fi
+  litp ${_path_} materialise
+}
+
+### Function: import_iso ###
+#
+# Import an ISO via LITP import command
+#
+# Arguments:
+#       $1 - Path to mounted ISO
+# Return Values:
+#       None
+import_iso()
+{
+  local _iso_=$1
+  local _type_=$2
+  if [ ! ${_iso_} ] ; then
+    error "ISO not specified!"
+    exit ${EXIT_ERROR}
+  fi
+  local _umount_=0
+  local _mount_
+  if [ -d ${_iso_} ] ; then
+    _mount_=${_iso_}
+  else
+    _umount_=1
+    _mount_=/mnt/`${BASENAME} ${_iso_}`
+    mount_iso ${_iso_} ${_mount_}
+  fi
+  local _newrepo_
+  log "Starting import at `${DATE}`"
+  # If the iso is a TOR iso, delete the repo if it already exists, any other iso types; just import.
+  if [ "${_type_}" == "tor" ] ; then
+    _newrepo_=`get_iso_pkg_dir ${_mount_}`
+    if [ $? -ne 0 ] ; then
+      error "Couldnt determinte the repo created from ${_mount_}"
+      error "${_newrepo_}"
+      exit 1
+    fi
+    if [ -d ${_newrepo_} ] ; then
+      log "yum repo already exists, cleaning ..."
+      ${RM} -rf ${_newrepo_}
+    fi
+  fi
+  log "Importing from ${_iso_} ..."
+  if [ "${_type_}" == "litp" ] ; then
+    litp /depmgr import ${_mount_}/litp
+  else 
+    litp /depmgr import ${_mount_}
+  fi
+  log "Finished import at `${DATE}`"
+  if [ "${_type_}" == "tor" ] ; then
+    if [ ! -d ${_newrepo_} ] ; then
+      error "Expected yum repo ${_newrepo_} not found"
+      exit 1
+    fi
+    log "New version imported to ${_newrepo_} (exists)"
+  fi
+  if [ ${_umount_} -eq 1 ] ; then
+    umount_iso ${_mount_} "delete"
+  fi
+}
+
+### Function: mount_iso ###
+#
+# Mount an ISO to a directory
+#
+# Arguments:
+#       $1 - Path of ISO to mount
+# Return Values:
+#       None
+mount_iso()
+{
+  local _iso_=$1
+  local _mountpoint_=$2
+  if [ ! ${_iso_} ] ; then
+    error "ISO not specified!"
+    exit ${EXIT_ERROR}
+  fi
+  local _type_
+  _type_=`${FILE} --mime-type ${_iso_} | ${AWK} '{print $2}'`
+  if [ $? -ne 0 ] ; then
+    error "Could not get file type for ${_iso_}"
+    exit 1
+  fi
+  if [ "${_type_}" == "application/x-directory" ] ; then
+    error "Cant mount device of type directory"
+    exit 1
+  else
+    local _mountoptions_
+    if [ "${_type_}" == "application/x-block-device" ] ; then
+      _mountoptions_="-t iso9660"
+    elif [ "${_type_}" == "application/octet-stream" ] ; then
+      _mountoptions_="-o loop"
+    else
+      error "Unsupported container type ${_type_} for ${_iso_}"
+      exit 1
+    fi
+    ${UMOUNT} ${_mountpoint_} > /dev/null 2>&1
+    ${RM} -rf ${_mountpoint_} > /dev/null 2>&1
+    ${MKDIR} -p ${_mountpoint_}
+    ${MOUNT} ${_mountoptions_} ${_iso_} ${_mountpoint_}
+    local _rc_=$?
+    if [ ${_rc_} -ne 0 ] ; then
+      error "Failed to mount(${_rc_}) ${_iso_} to ${_mountpoint_}"
+      exit 1
+    fi
+  fi
+}
+
+### Function: umount_iso ###
+#
+# Unmount a mounted ISO
+#
+# Arguments:
+#       $1 - Path to ISO mount point
+#       $2 - Optional: Flag to indicate if the mount dir is to be deleted (Default: False)
+# Return Values:
+#       None
+umount_iso()
+{
+  local _mountpoint_=$1
+  local _deletep_=$2
+  ${UMOUNT} ${_mountpoint_} > /dev/null 2>&1
+  if [ ${_deletep_} ] ; then
+    ${RM} -rf ${_mountpoint_} > /dev/null 2>&1
+  fi
+}
+
+### Function: iniget_noexit ###
+#
+# Get an ini value. If there's an error, return the error code rather than exiting
+# with the error code.
+#
+# The value is echoed to STDOUT (errors to STDERR)
+#
+# Arguments:
+#       $1 - INI file
+#       $2 - The block name
+#       $3 - The param name
+# Return Values:
+#       0 - block & param found and value echoed to STDOUT
+#       >=1 - Error getting the ini value (see ini.py for sepcific exit codes)
+iniget_noexit()
+{
+  local _ini_=$1
+  local _section_=$2
+  local _option_=$3
+  local _value_
+  _value_=`${PYTHON} ${INIPY} -f ${_ini_} -s ${_section_} -o ${_option_} 2>&1`
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "${_value_}"
+    return ${_rc_}
+  fi
+  ${ECHO} "${_value_}"
+  return ${RETURN_OK}
+}
+
+### Function: iniget ###
+#
+# Get an ini value. If there's an error the function exists with the error code.
+#
+# The value is echoed to STDOUT (errors to STDERR)
+#
+# Arguments:
+#       $1 - INI file
+#       $2 - The block name
+#       $3 - The param name
+# Return Values:
+#       0 - block & param found and value echoed to STDOUT
+#       >=1 - Error getting the ini value (see ini.py for sepcific exit codes)
+iniget()
+{
+  local _value_
+  _value_=`iniget_noexit $1 $2 $3`
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "${_value_}"
+    exit ${_rc_}
+  fi
+  ${ECHO} "${_value_}"
+}
+
+### Function: iniget_section_keys ###
+#
+# Get the keys in a block
+#
+# The value is echoed to STDOUT (errors to STDERR)
+#
+# Arguments:
+#       $1 - INI file
+#       $2 - The block name
+# Return Values:
+#       0 - block found and block keys echoed to STDOUT
+#       >=1 - Error getting the ini value (see ini.py for sepcific exit codes)
+iniget_section_keys()
+{
+  local _ini_=$1
+  local _section_=$2
+  local _value_
+  _value_=`${PYTHON} ${INIPY} -f ${_ini_} -s ${_section_} --keys 2>&1`
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "${_value_}"
+    exit ${_rc_}
+  fi
+  ${ECHO} "${_value_}"
+}
+
+### Function: iniget_blocks ###
+#
+# Get a list of blocks
+#
+# The value is echoed to STDOUT (errors to STDERR)
+#
+# Arguments:
+#       $1 - INI file
+# Return Values:
+#       0 - Block names echoed to STDOUT
+#       >=1 - Error getting the ini blocks (see ini.py for sepcific exit codes)
+iniget_blocks()
+{
+  local _ini_=$1
+  local _value_
+  _value_=`${PYTHON} ${INIPY} -f ${_ini_} --block_keys 2>&1`
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "${_value_}"
+    exit ${_rc_}
+  fi
+  ${ECHO} "${_value_}"
+}
+
+### Function: get_repo_name ###
+#
+# Get the yum repo name from a directory
+# - TOR_`BAENAME $1`
+#
+# Arguments:
+#       $1 - The repo directory
+# Return Values:
+#       None
+get_repo_name()
+{
+  local _repodir_=$1
+  local _vname_="TOR_`${BASENAME} ${_repodir_} | ${TR} '\.' '_'`"
+  ${ECHO} "${_vname_}"
+}
+
+
+### Function: get_iso_pkg_dir ###
+#
+# Get the location with in the TOR iso where the packages are, usually /products/TOR/<version>
+#
+# Arguments:
+#       $1 - The dir the TOR ISO is mounted to
+# Return Values:
+#       None
+get_iso_pkg_dir()
+{
+  local _mount_=$1
+  local _vdir_
+  _vdir_=`${FIND} ${_mount_} -type d | ${TAIL} -1 2>&1`
+  if [ $? -ne 0 ] ; then
+    error "${_vdir_}"
+    exit 1
+  fi
+  _tor_version_=`${BASENAME} ${_vdir_}`
+  local _repo_base_
+  _repo_base_=`iniget ${TOR_INI} TOR_SW_REPO repo_base`
+  if [ $? -ne 0 ] ; then
+    ${ECHO} "${_repo_base_}"
+    exit 1
+  fi
+  ${ECHO} "${_repo_base_}/products/TOR/${_tor_version_}"
+  return ${RETURN_OK}
+}
+
+### Function: define_repo ###
+#
+# Create landscape entried for a new yum repo
+#
+# Arguments:
+#       $1 - The YUM repo name
+#       $2 - The YUM repo path
+# Return Values:
+#       None
+define_repo()
+{
+  local _reponame_=$1
+  local _repopath_=$2
+  local _bname_=`${BASENAME} ${_repopath_}`
+  ${ECHO} ${_bname_} | ${GREP} "\." > /dev/null 2>&1
+  if [ $? -eq 0 ] ; then
+    _linkname_=`${ECHO} ${_bname_} | ${TR} '.' '_'`
+    _linkname_=`${DIRNAME} ${_repopath_}`/${_linkname_}
+    log "Linking ${_repopath_} to ${_linkname_}"
+    ${LN} -sf ${_repopath_} ${_linkname_}
+    _repopath_=${_linkname_}
+  fi
+  create_path /definition/repository
+  create_path /definition/deployment1/ms1/repository component-ref
+  litp /definition/deployment1/ms1/repository update component-name=repository
+  materialise /definition/deployment1/ms1/repository
+  for _node_ in sc1 sc2 ; do
+    create_path /definition/deployment1/cluster1/${_node_}/repository component-ref
+    litp /definition/deployment1/cluster1/${_node_}/repository update component-name=repository
+    materialise /definition/deployment1/cluster1/${_node_}/repository
+  done
+  local _path_file_="file://${_repopath_}"
+  local _basename_=`${BASENAME} ${_repopath_}`
+  local _path_www_="http://MS1/products/TOR/${_basename_}"
+  create_path /inventory/deployment1/ms1/repository/yum_repo_${_reponame_} repository
+  litp /inventory/deployment1/ms1/repository/yum_repo_${_reponame_} update name="${_reponame_}" url="${_path_file_}"
+
+  for _node_ in sc1 sc2 ; do
+    create_path /inventory/deployment1/cluster1/${_node_}/repository/yum_repo_${_reponame_} repository
+    litp /inventory/deployment1/cluster1/${_node_}/repository/yum_repo_${_reponame_} update name="${_reponame_}" url="${_path_www_}"
+  done
+}
+
+
+### Function: delete_plan_snap_tasks ###
+#
+# Delete all snapshot tasks in a LITP plan
+#
+# Arguments:
+#       $1 - The plan name
+# Return Values:
+#       None
+delete_plan_snap_tasks()
+{
+  local _plan_=$1
+  ${PYTHON} ${LITPHELPERPY} --delete_snap_tasks --plan_path /depmgr/${_plan_} 2>&1
+  if [ $? -ne 0 ] ; then
+    exit 1
+  fi
+  litp /depmgr/${_plan_} show plan --verbose
+}
+
+### Function: delete_upgrade_plan ###
+#
+# Delete an upgrade plan
+#
+# Arguments:
+#       $1 - The plan name
+# Return Values:
+#       None
+delete_upgrade_plan()
+{
+  local _plan_=$1
+  ${LITP} /depmgr/${_plan_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    log "No upgrade plan called '${_plan_} exits."
+    return
+  fi
+  litp /depmgr/${_plan_} cleanup
+}
+
+### Function: _prepare_upgrade_plan ###
+#
+# Create an upgrade plan
+#
+# Arguments:
+#       $1 - The plan name
+# Return Values:
+#       None
+_prepare_upgrade_plan()
+{
+  local _plan_=$1
+  ${LITP} /depmgr/${_plan_} show > /dev/null 2>&1
+  if [ $? -eq 0 ] ; then
+    error "Upgrade plan '${_plan_}' already exists, run plan cleanup first"
+    exit 1
+  fi
+  litp /depmgr prepare ${_plan_} scope=/inventory
+}
+
+### Function: _plan_upgrade_plan ###
+#
+# Plan an upgrade plan
+#
+# Arguments:
+#       $1 - The plan name
+# Return Values:
+#       None
+_plan_upgrade_plan()
+{
+  local _plan_=$1
+  ${LITP} /depmgr/${_plan_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    error "No upgrade plan called '${_plan_}' found"
+    exit 1
+  fi
+  litp /depmgr/${_plan_} plan
+  litp /depmgr/${_plan_} show plan --verbose
+}
+
+### Function: _execute_upgrade_plan ###
+#
+# Execute an upgrade plan
+#
+# Arguments:
+#       $1 - The plan name
+# Return Values:
+#       None
+_execute_upgrade_plan()
+{
+  local _plan_=$1
+  ${LITP} /depmgr/${_plan_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    error "No upgrade plan called '${_plan_}' found"
+    exit 1
+  fi
+  _args_="start"
+  if [ ${SKIP_FAILED_TASKS} ] ; then
+    _args_="${_args_} ${SKIP_FAILED_TASKS}"
+  fi
+  ${ECHO} "litp /depmgr/${_plan_} ${_args_}" >> ${LOGFILE}
+  litp /depmgr/${_plan_} ${_args_}
+}
+
+### Function: stop_landscaped ###
+#
+# Stop landscaped service
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+stop_landscaped()
+{
+  ${SERVICE} ${LANDSCAPED} status > /dev/null 2>&1
+  if [ $? -eq 0 ] ; then
+    _sr_=`${SERVICE} ${LANDSCAPED} stop 2>&1`
+    if [ $? -ne 0 ] ; then
+      error "Failed to stop ${LANDSCAPED}"
+      error "${_sr_}"
+      exit 1
+    fi
+    log "Stopped ${LANDSCAPED}"
+  fi
+}
+
+### Function: start_landscaped ###
+#
+# Start landscaped service
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+start_landscaped()
+{
+  ${SERVICE} ${LANDSCAPED} status > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    _sr_=`${SERVICE} ${LANDSCAPED} start 2>&1`
+    if [ $? -ne 0 ] ; then
+      error "Failed to start ${LANDSCAPED}"
+      error "${_sr_}"
+      exit 1
+    fi
+    log "Started ${LANDSCAPED}"
+  fi
+}
+
+### Function: wait_for_lms_applied ###
+#
+# Waits for the LMS to fully apply, only returns once Applied == 0
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+wait_for_lms_applied()
+{
+  local _lastcount_=-1
+  while [ 1 ] ; do
+    local _count_
+    _count_=`${LITP} /inventory/deployment1/ms1 show -rp | ${GREP} -E "^\[Applying\]" | ${AWK} '{print $2}'`
+    if [ ${_count_} -eq 0 ] ; then
+      local _applied_
+      _applied_=`${LITP} /inventory/deployment1/ms1 show -rp | ${GREP} -E "^\[Applied\]" | ${AWK} '{print $2}'`
+      log "LMS fully applied (${_applied_} changes in total)"
+      break
+    elif [ ${_lastcount_} -ne ${_count_} ] ; then
+      local _temp_="changes"
+      if [ ${_count_} -eq 1 ] ; then
+        _temp_="change"
+      fi
+      log "${_count_} ${_temp_} still being applied to LMS, please wait ..."
+      _lastcount_=${_count_}
+      sleep 1
+    fi
+  done
+}
+
+### Function: update_monitoring ###
+#
+# Creates & configure the ericmon_config monitoring stuff
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_monitoring()
+{
+  local _path_=/inventory/deployment1/ms1/ericmon_config
+  ${LITP} ${_path_} show > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    litp ${_path_} create ericmon_config
+    litp ${_path_} configure
+  else
+    log "ericmon_config already exist. Configuring it..."
+    litp ${_path_} configure
+  fi
+}
+
+### Function: cmw_configuration_persist ###
+#
+# Call cmw-configuration-persist on one of the peer blades
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+cmw_configuration_persist()
+{
+  _controllers_=(`get_controller_list`)
+  if [ $? -ne 0 ] ; then
+    error "Failed to get a list of control nodes"
+    error "${_controllers_}"
+    exit 1
+  fi
+  local _system_
+  _system_=`${LITP} ${_controllers_[0]} find --name system 2>&1`
+  if [ $? -ne 0 ] ; then
+    error "Failed to find any systems for ${_controllers_[0]}"
+    error "${_system_}"
+    exit 1
+  fi
+  local _ctrl_host_
+  _ctrl_host_=`get_property_value ${_system_} "hostname"`
+  if [ $? -ne 0 ] ; then
+    error "${_ctrl_host_}"
+    exit 1
+  fi
+  if [ "${_ctrl_host_}" == "" ] ; then
+    error "Could not find a control host in landscape for ${_system_}"
+    exit 4
+  fi
+  log "Persisting CMW configuration ..."
+  ${SSH} ${_ctrl_host_} "cmw-configuration-persist 2>&1"
+  if [ $? -ne 0 ] ; then
+    error "cmw-configuration-persist failed on ${_ctrl_host_}, check /var/log/message for reason."
+    exit 1
+  fi
+}
+
+### Function: update_tor_version ###
+#
+# Update the verion history file
+#
+# Arguments:
+#       $1 -- Location of new package/ISO
+# Return Values:
+#       None
+update_tor_version()
+{
+  local _sw_base_=$1
+  local _installtype_=$2
+  if [ ! -f ${_sw_base_} ] ; then
+    ${ECHO} "ERROR: ${_sw_base_} not found!"
+  fi
+  if [ "${_installtype_}" != "install" ] && [ "${_installtype_}" != "upgrade" ] ; then
+    ${ECHO} "Installation type must be one of [install|upgrade]"
+    exit 1
+  fi
+  local _iso_version_=`${BASENAME} ${_sw_base_} .iso`
+  local _mountdir_="/var/tmp/tor_iso"
+  ${UMOUNT} ${_mountdir_} > /dev/null 2>&1
+  ${MKDIR} -p ${_mountdir_} > /dev/null 2>&1
+  ${MOUNT} -o loop ${_sw_base_} ${_mountdir_} 2>&1
+  local _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    ${ECHO} "Failed to mmount ${_sw_base_}"
+    exit ${_rc_}
+  fi
+  local _tor_version_=`${LS} -1 ${_mountdir_}/products/TOR/`
+  local _dot_version_file_=`get_tor_version_file`
+  if [ $? -ne 0 ] ; then
+    ${ECHO} "Failed to look up version file!"
+    exit 1
+  fi
+  local _type_="Installed"
+  if [ "${_installtype_}" == "install" ] ; then
+    ${RM} -f ${_dot_version_file_}
+  elif [ "${_installtype_}" == "upgrade" ] ; then
+    _type_="Upgraded"
+  fi
+  ${ECHO} "---------------------------------------------------------------" >> ${_dot_version_file_}
+  local _date_=`${DATE}`
+  ${ECHO} "System ${_type_} on ${_date_}" >> ${_dot_version_file_}
+  ${ECHO} "TOR Version: ${_tor_version_}" >> ${_dot_version_file_}
+  ${ECHO} "TOR ISO Version: ${_iso_version_}" >> ${_dot_version_file_}
+  ${ECHO} "TOR Package Versions:" >> ${_dot_version_file_}
+  for _rpm_ in `${LS} ${_mountdir_}/products/TOR/${_tor_version_}/*.rpm` ; do
+    _info_=`${RPM} -qp --queryformat '%{NAME} %{VERSION}|%{PACKAGER}' ${_rpm_}`
+    ${ECHO} -e "\t${_info_}" >> ${_dot_version_file_}
+  done
+  ${UMOUNT} ${_mountdir_} > /dev/null 2>&1
+  ${RM} -rf ${_mountdir_} > /dev/null 2>&1
+  ${CAT} ${_dot_version_file_}
+}
+
+### Function: _puppet_config_update ###
+#
+# Update runinterval parameter of puppet.conf file on all servers under LITP
+#
+# Arguments:
+#       $1 - new integer value
+# Return Values:
+#       None
+_puppet_config_update()
+{
+	
+_puppet_conf=/etc/puppet/puppet.conf
+_time_out=$1
+
+
+for n in `$LITP /inventory/deployment1/ find --resource rhel-component`
+do
+
+if [ ! -z ${n} ]
+then
+	_ip_addr_=$(get_address $n)
+	if [ $? -ne 0 ]
+	then
+		error "No IP address of the ${n} exist! Skipping..."
+		continue
+	fi
+else 
+	return 0
+fi
+
+$SSH $_ip_addr_ "$LS $_puppet_conf >/dev/null 2>&1"
+if [ $? -ne 0 ]
+then
+	error "File ${_puppet_conf} does not exist on ${_ip_addr_}"
+	continue
+fi
+
+${SSH} $_ip_addr_ "${CP} -p ${_puppet_conf} ${_puppet_conf}.orig"
+if [ $? -ne 0 ]
+then
+	error "File ${_puppet_conf} can not be copied to ${_puppet_conf}.orig on ${_ip_addr_}"
+	continue
+fi
+
+$SSH $_ip_addr_  "sed -i 's/.*runinterval.*/    runinterval = $_time_out/g' /etc/puppet/puppet.conf"
+
+done
+}
+
+### Function: _puppet_config_restore ###
+#
+# Update runinterval parameter of puppet.conf file on all servers under LITP
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+_puppet_config_restore()
+{
+_puppet_conf=/etc/puppet/puppet.conf
+
+for n in `$LITP /inventory/deployment1/ find --resource rhel-component`
+do
+
+if [ ! -z ${n} ]
+then
+	_ip_addr_=$(get_address $n)
+else 
+	return 0
+fi
+
+${SSH} ${_ip_addr_} "$LS  ${_puppet_conf}.orig >/dev/null 2>&1"
+if [ $? -eq 0 ]
+then
+	${SSH} ${_ip_addr_} "${CP} -p ${_puppet_conf}.orig ${_puppet_conf}"
+	if [ $? -ne 0 ]
+	then
+		error "File ${_puppet_conf} was not restored from ${_puppet_conf}.orig"
+		return 1
+	fi
+else 
+	error "File ${_puppet_conf}.orig does not exist on ${_ip_addr_}"
+	return 1
+fi
+
+done
+}
+
+### Function: _sysctl_update ###
+#
+# Update /etc/sysctl.conf parameters on all servers under LITP
+#
+# Arguments:
+#		$1 - parameter name to update
+#       $2 - new integer value
+# Return Values:
+#       None
+_sysctl_update()
+{
+	
+_sysctl_conf=/etc/sysctl.conf
+_param_=${1}
+_value_=${2}
+
+if [ -z ${2} ]
+        then
+	error "No value was provided for ${1}! Exiting..."
+	error "_sysctl_update usage: \$1 - parameter name to update, \$2 - new integer value"
+	exit 1
+
+fi
+
+for n in `$LITP /inventory/deployment1/ find --resource rhel-component`
+do
+
+	if [ ! -z ${n} ]
+	then
+		_ip_addr_=$(get_address $n)
+		if [ $? -ne 0 ]
+		then
+			error "No IP address of the ${n} exist! Exiting..."
+			exit 1
+		fi
+	else 
+		return 0
+	fi
+	
+	log "Updating $_param_ in ${_sysctl_conf} with the value $_value_ on server with IP ${_ip_addr_}"
+	
+	_res=$($SSH ${_ip_addr_} "$LS $_sysctl_conf >/dev/null 2>&1")
+	if [ $? -ne 0 ]
+	then
+		error "File ${_sysctl_conf} does not exist on ${_ip_addr_} server! Exiting..."
+		error "${_res}"
+		exit 1
+	fi
+	
+	_res=$(${SSH} ${_ip_addr_} "${CP} -p ${_sysctl_conf} ${_sysctl_conf}.${_param_} 2>&1")
+	if [ $? -ne 0 ]
+	then
+		error "File ${_sysctl_conf} can not be copied to ${_sysctl_conf}.${_param_} on ${_ip_addr_}"
+		error "${_res}"
+		exit 1
+	fi
+	
+		_res=$(${SSH} ${_ip_addr_} "${GREP} -v ${_param_} ${_sysctl_conf} > ${_sysctl_conf}.${_param_}.tmp")
+	if [ $? -ne 0 ]
+	then
+		error "File ${_sysctl_conf} can not be copied to ${_sysctl_conf}.${_param_} on ${_ip_addr_}"
+		error "${_res}"
+		exit 1
+	fi
+	
+	$SSH ${_ip_addr_}  "${ECHO} ${_param_} = ${_value_} >> ${_sysctl_conf}.${_param_}.tmp"
+	$SSH ${_ip_addr_}  "${MV} ${_sysctl_conf}.${_param_}.tmp ${_sysctl_conf}"
+	$SSH ${_ip_addr_}  "${RM} -rf ${_sysctl_conf}.${_param_}.tmp"
+	
+log "${_sysctl_conf} successfully updated on server ${_ip_addr_} with the new value."	
+
+done
+}
+
+configure_core_dumps() {
+	local _host_=${1:-localhost}
+	local _core_pattern_="/ericsson/tor/dumps/core.%e.pid%p.usr%u.sig%s.tim%t"
+	if [ ${_host_} = "localhost" ] 
+	then
+		sysctl -q -w kernel.core_pattern="$_core_pattern_" && return 0
+	else
+		ssh ${_host_} sysctl -q -w kernel.core_pattern="$_core_pattern_" && return 0
+	fi	
+
+	error "Failed to configure core dumps with value $_core_pattern_ on $_host_"
+	return 1
+}
+
+
+cidr2netmask() {
+	local _ret_
+	set -o pipefail
+	ipcalc -m  "$1" 2>/dev/null | cut -d= -f 2-
+	_ret_=$?	
+	set +o pipefail
+	return $_ret_
+}
+

@@ -1,0 +1,1834 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson LMI                                    SCRIPT
+# ********************************************************************
+#
+# (c) Ericsson LMI 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson LMI. The programs may be used
+# and/or copied only with the written permission from Ericsson LMI or
+# in accordance with the terms and conditions stipulated in the
+# agreement/contract under which the program(s) have been supplied.
+#
+# ********************************************************************
+# Name    : stage_functions.bsh
+# Date    : 04/06/2012
+# Revision: R1A01
+# Purpose : TOR install/upgrade stages
+#
+# Usage   : N/A
+#
+# ********************************************************************
+
+AWK=/bin/awk
+BASENAME=/bin/basename
+CAT=/bin/cat
+CMW_PARTIAL_BACKUP_LIST=/opt/coremw/bin/cmw-partial-backup-list
+CP=/bin/cp
+CREATEREPO=/usr/bin/createrepo
+DATE=/bin/date
+ECHO=/bin/echo
+FIND=/bin/find
+GREP=/bin/grep
+HEAD=/usr/bin/head
+LITP=/usr/bin/litp
+LS=/bin/ls
+LVRENAME=/sbin/lvrename
+LVS=/sbin/lvs
+MKDIR=/bin/mkdir
+MV=/bin/mv
+PYTHON=/usr/bin/python
+RM=/bin/rm
+RPM=/bin/rpm
+SED=/bin/sed
+SSH=/usr/bin/ssh
+TAIL=/usr/bin/tail
+TAR=/bin/tar
+TEE=/usr/bin/tee
+TR=/usr/bin/tr
+WC=/usr/bin/wc
+YUM=/usr/bin/yum
+SCP=/usr/bin/scp
+
+
+if [ ! ${SCRIPT_HOME} ] ; then
+	${ECHO} "\${SCRIPT_HOME} not set"
+	exit 1
+fi
+
+LITPHELPERPY=${SCRIPT_HOME}/lib/litp/litp_helper.py
+DEPPARSERPY=${SCRIPT_HOME}/lib/litp/deployment_parser.py
+XMLMERGERPY=${SCRIPT_HOME}/lib/xml_utils/xml_merge.py
+XMLVERSIONERPY=${SCRIPT_HOME}/lib/xml_utils/pkg_auto_version.py
+
+LAST_KNOWN_CONFIG=/var/lib/landscape/LAST_KNOWN_CONFIG
+LMS_INV_PATH=/inventory/deployment1/ms1
+UPGRADE_PLAN="system_upgrade"
+LITP_YUM_REPO=/var/www/html/litp
+
+RESOURCE_CLASS_NODE=node
+
+### Stage: import_tor_iso ###
+#
+# Import the TOR ISO. ${TOR_ISO} needs to be set
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+import_tor_iso()
+{
+  # Note: all nodes need to be online...
+  if [ ! ${TOR_ISO} ] ; then
+    log "No TOR ISO specified, skipping stage."
+    return 0
+  fi
+  import_iso ${TOR_ISO} 'tor'
+}
+
+### Stage: import_litp_iso ###
+#
+# Import the LITP ISO
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+import_litp_iso()
+{
+  # Note: all nodes need to be online...
+  if [ ! ${LITP_ISO} ] ; then
+    log "No LITP ISO specified, skipping stage."
+    return 0
+  fi
+  import_iso ${LITP_ISO} 'litp'
+}
+
+### Stage Import os patches####
+
+import_os_patches()
+{
+  # Note: all nodes need to be online...
+  if [ ! ${OS_PATCHES} ] ; then
+    log "No OS Patches specified, skipping stage."
+    return 0
+  fi
+  mkdir -p /mnt/OSpatches
+  tar xvzf ${OS_PATCHES} -C /mnt/OSpatches
+  litp /depmgr import /mnt/OSpatches
+  rm -rf /mnt/OSpatches
+}
+
+
+### Stage: import_redhat_iso ###
+#
+# Import the RedHat ISO
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+import_redhat_iso()
+{
+  # Note: all nodes need to be online...
+  if [ ! ${LITP_ISO} ] ; then
+    log "No LITP ISO specified, skipping stage."
+    return 0
+  fi
+  import_iso ${LITP_ISO} 'redhat'
+}
+
+### Stage: import_litp_sp ###
+#
+# Import the LITP service pack iso
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+import_litp_sp()
+{
+  # Note: all nodes need to be online...
+  if [ ! ${LITP_SP} ] ; then
+    log "No LITP service pack specified, skipping stage."
+    return 0
+  fi
+  import_iso ${LITP_SP} 'litp'
+}
+
+### Stage: upgrade_litp_servicepack ###
+#
+# Import a LITP service pack (.tar.gz) to the LITP YUM repo
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+upgrade_litp_servicepack()
+{
+  if [ ! ${LITP_SP} ] ; then
+    log "No LITP Service Pack specified, skipping stage."
+    return 0
+  fi
+  log "Starting LMS servicepack upgrade at `${DATE}`"
+  log "Extracting ${LITP_SP} to ${LITP_YUM_REPO} ..."
+  local _po_
+  _po_=`${TAR} -xvzf ${LITP_SP} -C ${LITP_YUM_REPO} 2>&1`
+  local _rc_=$?
+  if [ -f ${LOGFILE} ] ; then
+    ${ECHO} "${_po_}" >> ${LOGFILE}
+  fi
+  if [ ${_rc_} -ne 0 ] ; then
+    error "Failed to extract ${LITP_SP} to ${LITP_YUM_REPO}"
+    error "${_po_}"
+    exit 1
+  fi
+  log "Executing servicepack upgrade ..."
+  pushd ${LITP_YUM_REPO} > /dev/null
+  ${BASH} install_patches.sh 2>&1
+  local _rc_=$?
+  popd > /dev/null
+  if [ ${_rc_} -ne 0 ] ; then
+    error "Failed to upgrade servicepack ${LITP_SP}"
+    exit 1
+  fi
+  log "Finished LMS servicepack upgrade on `${DATE}`"
+}
+
+### Stage: register_tor_sw ###
+#
+# Register the imported TOR repo with LITP.
+#   Results in YUM repos created on LMS & peer nodes
+#
+# Arguments:
+#       $1 - The TOR ISO file
+# Return Values:
+#       None
+register_tor_sw()
+{
+  if [ ! ${TOR_ISO} ] ; then
+    log "No TOR ISO specified, skipping stage."
+    return 0
+  fi
+  local _iso_=${TOR_ISO}
+  local _umount_=0
+  local _mount_
+  if [ -d ${_iso_} ] ; then
+    _mount_=${_iso_}
+  else
+    _umount_=1
+    _mount_=/mnt/`${BASENAME} ${_iso_}`
+    mount_iso ${_iso_} ${_mount_}
+  fi
+  local _tor_vrepo_
+  _tor_vrepo_=`get_iso_pkg_dir ${_mount_}`
+  if [ $? -ne 0 ] ; then
+    error "${_tor_vrepo_}"
+    exit 1
+  fi
+  local _vname_=`get_repo_name ${_tor_vrepo_}`
+  define_repo "${_vname_}" "${_tor_vrepo_}"
+
+  # Added configure command for LITP-4433
+  litp /inventory/deployment1/ms1/repository/yum_repo_${_vname_} configure
+  litp /inventory/deployment1/cluster1/sc1/repository/yum_repo_${_vname_} configure
+  litp /inventory/deployment1/cluster1/sc2/repository/yum_repo_${_vname_} configure
+
+
+  if [ ${_umount_} -eq 1 ] ; then
+    umount_iso ${_mount_} "delete"
+  fi
+}
+
+### Stage: backup_last_known_config ###
+#
+# Back up the LITP model
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+backup_last_known_config()
+{
+  if [ ! ${BACKUP_DIR} ] ; then
+    error "\${BACKUP_DIR} not defined"
+    exit 1
+  fi
+  if [ ! ${BACKUP_LAST_KNOWN_CONFIG} ] ; then
+    error "\${BACKUP_LAST_KNOWN_CONFIG} not defined"
+    exit 1
+  fi
+  if [ -f ${LAST_KNOWN_CONFIG} ] ; then
+    if [ ! -d ${BACKUP_DIR} ] ; then
+      ${MKDIR} -p ${BACKUP_DIR} > /dev/null 2>&1
+    fi
+    stop_landscaped
+    if [ -f ${BACKUP_LAST_KNOWN_CONFIG} ] ; then
+      local _prev_=`${DATE} +%Y%m%d_%H%M%S`
+      log "Backup already exists, renaming to ${BACKUP_LAST_KNOWN_CONFIG}_${_prev_}"
+      ${MV} ${BACKUP_LAST_KNOWN_CONFIG} ${BACKUP_LAST_KNOWN_CONFIG}_${_prev_} 2>&1
+    fi
+    ${CP} ${LAST_KNOWN_CONFIG} ${BACKUP_LAST_KNOWN_CONFIG} 2>&1
+    if [ $? -ne 0 ] ; then
+      error "Failed to backup ${LAST_KNOWN_CONFIG}"
+      exit 1
+    fi
+    log "Backed up ${LAST_KNOWN_CONFIG} to ${BACKUP_LAST_KNOWN_CONFIG}"
+    start_landscaped
+  fi
+}
+
+### Stage|Fuction: restore_last_known_config ###
+#
+# Restore up the LITP model
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+restore_last_known_config()
+{
+  if [ ! -f ${BACKUP_LAST_KNOWN_CONFIG} ] ; then
+    warning "No landscape backup available!"
+    return
+  fi
+  stop_landscaped
+  ${CP} ${BACKUP_LAST_KNOWN_CONFIG} ${LAST_KNOWN_CONFIG} 2>&1
+  if [ $? -ne 0 ] ; then
+    error "Failed to restore ${BACKUP_LAST_KNOWN_CONFIG}"
+    exit 1
+  fi
+  log "Restored ${BACKUP_LAST_KNOWN_CONFIG}"
+  start_landscaped
+}
+
+### Stage: prep_upgrade ###
+#
+# Prepare an upgrade.
+#   Looks for a function named pre_upgrade_<from_version>, if found it runs it.
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+prep_upgrade()
+{
+  local _prefix_="pre_upgrade_"
+  local _from_version_=`${LITP} --version | ${GREP} -e "^LITP Version:" | ${AWK} '{print $4}' | ${TR} '\.' '_'`
+  type -t ${_prefix_}${_from_version_} > /dev/null 2>&1
+  if [ $? -eq 0 ] ; then
+    log "Running pre-upgrade steps for FROM state ${_from_version_} (${_prefix_}${_from_version_})"
+    ${_prefix_}${_from_version_}
+  else
+    log "No pre-upgrade steps defined for FROM state ${_from_version_}, nothing to be done."
+  fi
+}
+
+### Stage: log_current_litp_versions ###
+#
+# Log the current LITP version & any Ericsson packages installed
+#   Looks for a function named pre_upgrade_<from_version>
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+log_current_litp_versions()
+{
+  log "Logging current versions ..."
+  ${LITP} --version >> ${LOGFILE} 2>&1
+  ${LITP} /inventory version litp >> ${LOGFILE} 2>&1
+}
+
+
+fix_LITP_3983()
+{
+  #LITP-3983: LITP Upgrade from .0.26 to 1.0.28, need to set tipc stuff to get the lde verify to succeed
+  for _net_ in `${LITP} /inventory/deployment1/ find --resource ng-net | ${GREP} -vE "ms1|net_backup|net_storage" | ${GREP} -E "net_HB*"` ; do
+    local _ip_optional_=`${LITP} ${_net_} show | ${GREP} "ip_optional:" | ${AWK} -F\" '{print $2}'`
+    if [ "${_ip_optional_}" == "None" ] ; then
+      litp ${_net_} update ip_optional=True
+    fi
+  done
+  for _net_ in `${LITP} /inventory/deployment1/ find --resource ng-net | ${GREP} -vE "ms1|net_backup|net_storage" | ${GREP} -E "net_TORservices"` ; do
+    local _tipc_internal_=`${LITP} ${_net_} show | ${GREP} "tipc_internal:" | ${AWK} -F\" '{print $2}'`
+    if [ "${_tipc_internal_}" == "None" ] ; then
+      litp ${_net_} update tipc_internal=True
+    fi
+  done
+}
+
+### Stage: upgrade_litp_lms ###
+#
+# Upgrade the LITP s/w on the LMS
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+upgrade_litp_lms()
+{
+  if [ ! ${LITP_ISO} ] && [ ! ${LITP_SP} ] ; then
+    log "No LITP ISO or Service Pack specified, skipping stage."
+    return 0
+  fi
+  if [ ! ${TOR_INI} ] ; then
+    error "\${TOR_INI} not defined"
+    exit 1
+  fi
+  local _litp_repo_
+  _litp_repo_=`iniget ${TOR_INI} LITP litp_repo_name`
+  if [ $? -ne 0 ] ; then
+    error "${_litp_repo_}"
+    exit 1
+  fi
+  # Check there's LVM snapshots created, if not; exit
+  ${LVS} -o lv_attr | ${TR} -d ' ' | ${GREP} -E "^s" > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    error "No LVM snapshots exist on the LMS, existing upgrade a no restore option will be available"
+    exit 3
+  fi
+  log "Starting LMS sprint upgrade at `${DATE}`"
+  ${YUM} clean all 2>&1
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "LMS LITP upgrade failed, yum clean failed."
+    exit 1
+  fi
+  log "Executing yum upgrade for repo ${_litp_repo_}, please wait..."
+  ${YUM} --disablerepo="*" --enablerepo="${_litp_repo_}" --assumeyes upgrade 2>&1
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "LMS LITP upgrade failed, see logfile for more details"
+    exit 1
+  fi
+  log "Yum upgrade for repo ${_litp_repo_} completed."
+  log "Restarting landscape service ..."
+  stop_landscaped
+  start_landscaped
+  fix_LITP_3983
+  log "Applying any changes ..."
+  litp /inventory configure
+  litp /cfgmgr apply
+  log "Finished LMS sprint upgrade on `${DATE}`"
+}
+
+### Stage: upgrade_redhat_lms ###
+#
+# Upgrade the LITP s/w on the LMS
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+upgrade_redhat_lms()
+{
+  if [ ! ${LITP_ISO} ] ; then
+    log "No LITP ISO or Service Pack specified, skipping stage."
+    return 0
+  fi
+
+  # Check there's LVM snapshots created, if not; exit
+  ${LVS} -o lv_attr | ${TR} -d ' ' | ${GREP} -E "^s" > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    error "No LVM snapshots exist on the LMS, existing upgrade a no restore option will be available"
+    exit 3
+  fi
+  log "Starting OS upgrade at `${DATE}`"
+  ${YUM} clean all 2>&1
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "LMS OS upgrade failed, yum clean failed."
+    exit 1
+  fi
+  log "Executing yum upgrade for repos UPDATES, OS, please wait..."
+  ${YUM} --disablerepo="*" --enablerepo="UPDATES, OS" --assumeyes upgrade 2>&1
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "LMS OS upgrade failed, see logfile for more details"
+    exit 1
+  fi
+  log "Yum upgrade for repos UPDATES, OS completed."
+  log "Finished LMS OS upgrade on `${DATE}`"
+}
+####################################################
+####################################################
+#workaround to upgrade hyperics 
+#must be used in 1.0.17 -> 1.0.19 upgrade only
+#please remove in any other versions
+####################################################
+####################################################
+#  ${YUM} list updates| grep -i hyperics
+#  _rc_=$?
+#  if [ ${_rc_} -ne 0 ] ; then
+#    log "no hyperic upgrade available exiting..."
+#    exit 0
+#  fi
+#  ${YUM} -y remove EXTRhyperics_CXP9021419
+#      _rc_=$?
+#  if [ ${_rc_} -ne 0 ] ; then
+#    error "RPM EXTRhyperics_CXP9021419 failed to remove, exiting."
+#    exit 1
+#  fi
+#  rm -rf /tmp/hyperic-hq-server-was-running
+#  
+#  ${YUM} -y install ERICmongui_CXP9023093
+#    _rc_=$?
+#  if [ ${_rc_} -ne 0 ] ; then
+#    error "ERICmongui_CXP9023093 failed to install, exiting."
+#    exit 1
+#  fi
+#  log "EXTRhyperics_CXP9021419 was successfully upgraded!"
+#
+
+reboot_lms()
+{
+  log "Connect to LMS iLo and order reboot with \"shutdown -r now\" command"
+  log "When reboot is finished connect to LMS and re-run upgrade script"
+  #echo "cleanup_lms_snapshots" > /opt/ericsson/torinst/etc/.tor_upgrade_current_stage
+  #do not remove snapshots on LMS - skip to mod ssl workaround
+  echo "mod_ssl_workaround" > /opt/ericsson/torinst/etc/.tor_upgrade_current_stage
+  exit 19
+}
+
+wait_for_lms_applied()
+{
+  if [ ! ${LITP_ISO} ] && [ ! ${LITP_SP} ] ; then
+    log "No LITP ISO or Service Pack specified, skipping stage."
+    return 0
+  fi
+  log "Waiting for all required changes to apply ..."
+  local _applying_count_=-1
+  while [ 1 ] ; do
+    _count_=`${LITP} /inventory/ show -rp | ${GREP} "Applying" | ${GREP} -vE "^\[|ericmon_config|cmw_cluster_config|ip_[backup|storage]|ipv6" | ${WC} -l`
+    if [ ${_count_} -ne 0 ] ; then
+      if [ ${_count_} -ne ${_applying_count_} ] ; then
+        log "${_count_} components still Applying ..."
+      fi
+      _applying_count_=${_count_}
+      sleep 1
+    else
+      log "All required components Applied"
+      break
+    fi
+  done
+}
+
+### Stage: update_ha_manager ###
+#
+# Set the Cluster HA manager to CMW. Required if you want to restore a plan.
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_ha_manager()
+{
+  local _cluster_=/inventory/deployment1/cluster1
+  ${LITP} ${_cluster_} show > /dev/null 2>&1
+  if [ $? -eq 0 ] ; then
+    local _hamanager_="CMW"
+    local _ham_=`get_property_value ${_cluster_} HA_manager`
+    if [ "${_ham_}" != "${_hamanager_}" ] ; then
+      log "Setting HA manager to ${_hamanager_}"
+      litp ${_cluster_} update HA_manager="${_hamanager_}"
+      litp ${_cluster_} configure
+    else
+      log "HA manager already set to ${_hamanager_}"
+    fi
+  fi
+}
+
+
+### Stage: update_snap_sizes ###
+#
+# TORD-1028
+# Step to update Snapshot size from default to 0 for JBoss lvs
+# during 1.0.19 to 1.0.19/1 upgrade
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_snap_sizes()
+{
+  local _lvhornetq_=/inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_FMPMServ_su_0_jee_instance/
+  local _snapsize_=`${LITP} ${_lvhornetq_} show | ${GREP} "snap_percent" | ${AWK} '{print $2}'`
+  if [ "${_snapsize_}" != "\"0\""  ] ; then
+	log "Updating snapshot sizes..."
+	local _file_sys_
+	declare -a _file_sys_list_=('lv_FMPMServ_su_0_jee_instance' \
+		'lv_FMPMServ_su_1_jee_instance' \
+		'lv_MedCore_su_0_jee_instance' \
+		'lv_MedCore_su_1_jee_instance' \
+		'lv_MSFM_su_0_jee_instance' \
+		'lv_MSFM_su_1_jee_instance' \
+		'lv_MSPM0_su_0_jee_instance' \
+		'lv_MSPM0_su_1_jee_instance' \
+		'lv_MSPM1_su_0_jee_instance' \
+		'lv_MSPM1_su_1_jee_instance' \
+		'lv_UIServ_su_0_jee_instance' \
+		'lv_UIServ_su_1_jee_instance')
+
+	for _file_sys_ in ${_file_sys_list_[@]}; do
+		litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/${_file_sys_} update snap_percent=0
+		litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/${_file_sys_} update snap_percent=0
+	done
+
+	#SSO has su_0 on sc-1 and su_1 on sc-2
+	litp /inventory/deployment1/cluster1/sc1/control_1/os/lvm/lv_SSO_su_0_jee_instance update snap_percent=0
+	litp /inventory/deployment1/cluster1/sc2/control_2/os/lvm/lv_SSO_su_1_jee_instance update snap_percent=0
+
+	litp /inventory/deployment1/cluster1 configure
+  else
+	log "Already done, skipping stage..."
+  fi;
+}
+
+
+### Stage: prepare_upgrade_plan ###
+#
+# Create a peer upgrade plan
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+prepare_upgrade_plan()
+{
+  _prepare_upgrade_plan ${UPGRADE_PLAN}
+}
+
+### Stage: plan_upgrade_plan ###
+#
+# Plan a peer upgrade plan
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+plan_upgrade_plan()
+{
+  _plan_upgrade_plan ${UPGRADE_PLAN}
+}
+
+### Stage: check_no_plans_exist ###
+#
+# Check that no plans exist. If plans do exist exit with an error
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+check_no_plans_exist()
+{
+  local _plans_
+  _plans_=`${LITP} /depmgr show -l`
+  if [ $? -ne 0 ] ; then
+    error "${_plans_}"
+    exit 1
+  fi
+  local _count_
+  _count_=`${ECHO} "${_plans_}" | ${GREP} -vE "^$"| ${TR} -d ' '| ${WC} -l`
+  if [ ${_count_} -ne 0 ] ; then
+    error "Upgrade plans exists: ${_plans_}"
+    exit 1
+  else
+    log "No LITP Upgrade plans found, OK."
+  fi
+}
+
+### Stage: check_no_backups_exist ###
+#
+# Check that no backups exist. If backups do exist exit with an error
+# Note: if LVM snapshots exist on LMS we ingnore it and continue anyway
+#    This is due to implemented full LMS rollback workaround during
+#    before CP4 is installed (procedure may/should change after LITP CP4)
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+check_no_backups_exist()
+{
+  local _controllers_
+  _controllers_=(`get_controller_list`)
+  if [ $? -ne 0 ] ; then
+    error "${_controllers_}"
+    exit 1
+  fi
+  local _nodeaddress_
+  _nodeaddress_=`get_address ${_controllers_[0]}`
+  if [ $? -ne 0 ] ; then
+    error "${_nodeaddress_}"
+    exit 1
+  fi
+  local _backups_
+  _backups_=`${SSH} ${_nodeaddress_} "${CMW_PARTIAL_BACKUP_LIST}"`
+  if [ $? -ne 0 ] ; then
+    error "${_backups_}"
+    exit 1
+  fi
+  _backups_=`${ECHO} "${_backups_}" | ${GREP} -vE '^$'`
+  if [ "${_backups_}" != "" ] ; then
+    error "CMW backups exist, delete these first: ${_backups_}"
+    exit 1
+  else
+    log "No CMW backups found, OK."
+  fi
+  ${LVS} --noheadings -o lv_attr | ${TR} -d ' ' | ${AWK} '{print substr($0, 0, 1)}' | ${GREP} -i 's' > /dev/null 2>&1
+  if [ $? -eq 0 ] ; then
+    error "LVM snapshots exist on LMS - continuing anyway"
+    exit 0
+  else
+    log "No LVM snapshots found on LMS"
+  fi
+  #TODO: Check if OMBS backups/restores are ongoing...
+}
+
+### Stage: execute_upgrade_plan ###
+#
+# Execute a peer upgrade plan
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+execute_upgrade_plan()
+{
+  log "Starting peer blade upgrade at `${DATE}`"
+  _execute_upgrade_plan ${UPGRADE_PLAN}
+  log "Completed peer blade upgrade at `${DATE}`"
+}
+
+### Stage: update_tor_versions ###
+#
+# Update the LITP models with new TOR sw versions.
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_tor_versions()
+{
+  if [ ! ${TOR_ISO} ] ; then
+    log "No TOR ISO specified, skipping stage."
+    return 0
+  fi
+  if [ ! -f ${TOR_ISO} ] ; then
+    error "${TOR_ISO} not found"
+    exit 1
+  fi
+  local _umount_=0
+  local _swdir_
+  local _mountdir_
+  if [ ! -d ${TOR_ISO} ] ; then
+    _mountdir_=/mnt/`${BASENAME} ${TOR_ISO}`
+    mount_iso ${TOR_ISO} ${_mountdir_}
+    _umount_=1
+    _swdir_=`${FIND} ${_mountdir_} -type d | ${TAIL} -1 2>&1`
+  else
+    _swdir_=${TOR_ISO}
+    _swdir_=${_mountdir_}
+  fi
+  ${ECHO} "Current TOR SW Versions" >> ${LOGFILE}
+  ${PYTHON} ${LITPHELPERPY} --show_deployables --path '/definition/tor_sw' >> ${LOGFILE} 2>&1
+  if [ $? -ne 0 ] ; then
+    error "Logging of current version failed, see ${LOGFILE} for details"
+    exit 1
+  fi
+  local _tor_vrepo_
+  _tor_vrepo_=`get_iso_pkg_dir ${_mountdir_}`
+  if [ $? -ne 0 ] ; then
+    error "${_tor_vrepo_}"
+    exit 1
+  fi
+  local _vname_=`get_repo_name ${_tor_vrepo_}`
+  local _output_
+  log "Updating packages for source repo ${_vname_}"
+  _output_=`${PYTHON} ${LITPHELPERPY} --update_deployables --repo ${_vname_} --swdir ${_swdir_} --path '/definition/tor_sw' 2>&1`
+  local _rc_=$?
+  ${ECHO} "${_output_}" >> ${LOGFILE}
+  if [ ${_rc_} -ne 0 ] ; then
+    error "${_output_}"
+    exit 1
+  fi
+  local _totals_=`${ECHO} "${_output_}" | ${GREP} -E "^Total"`
+  log "${_totals_}"
+  local _jboss_rpm_
+  _jboss_rpm_=`${FIND} ${_swdir_} -name "ERICjbosstemp_CXP9030293-*.rpm"`
+  local _jboss_rpm_version_
+  _jboss_rpm_version_=`${RPM} -qp --queryformat "%{VERSION}" ${_jboss_rpm_}`
+  if [ $? -ne 0 ] ; then
+    error "Could not get JBoss rpm version from ${_jboss_rpm_}"
+    error "${_jboss_rpm_version_}"
+    exit 1
+  fi
+  for _instance_ in `${LITP} /definition/jee_containers/ find --resource jee-container-def` ; do
+    litp ${_instance_} update version=${_jboss_rpm_version_}
+  done
+  if [ ${_umount_} -eq 1 ] ; then
+    umount_iso ${_mountdir_} "delete"
+  fi
+}
+
+
+### Stage: cleanup_upgrade ###
+#
+# Any post install cleanup tasks
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+cleanup_upgrade()
+{
+  local _torutil_rpm_
+  log "Cleanup up ..."
+  
+  ### reinstall ERICtorutilities in case of upgrade from 1.0.19
+  result_=$($LS /opt/ericsson/torutilities/bin/system_healthcheck.py 2>&1)
+  if [ $? -ne 0 ]
+  then
+  	_torutil_rpm_=$(yum  reinstall -y ERICtorutilities_CXP9030570)
+  	if [ $? -eq 0 ]
+  	then
+  		log "ERICtorutilities_CXP9030570 re-installed successfully!"
+  	fi
+  else
+  	log "ERICtorutilities_CXP9030570 re-install not required."
+  fi
+  	### rsyslog restart needed to start using new templates
+	log "Restarting rsyslog service on peer nodes"
+	local _node1_hostname_
+	local _node2_hostname_
+	local rc
+	_node1_hostname_=$(${LITP} /inventory/deployment1/cluster1/sc1/control_1/os/system show | grep hostname | awk -F\" '{print $2}')
+	_node2_hostname_=$(${LITP} /inventory/deployment1/cluster1/sc2/control_2/os/system show | grep hostname | awk -F\" '{print $2}')
+	${SSH} ${_node1_hostname_} "service rsyslog restart" >/dev/null
+	${SSH} ${_node2_hostname_} "service rsyslog restart" >/dev/null
+	
+####### cleanup for TORD-960 hornetq configuration update, require for 1.0.19 upgrade only #######
+	${SSH} ${_node1_hostname_} "rm -rf /opt/ericsson/nms/litp/etc/jboss/jboss_instance/post_start.d/configure_hornetq_cluster.sh" >/dev/null
+	${SSH} ${_node2_hostname_} "rm -rf /opt/ericsson/nms/litp/etc/jboss/jboss_instance/post_start.d/configure_hornetq_cluster.sh" >/dev/null
+##################################################################################################
+
+  _puppet_config_restore
+  if [ $? -eq 0 ]
+  then 
+  	log "Puppet configs was successfully restored."
+  else
+    error "Puppet configuration files failed to restore. Please check log for the reason."
+  fi
+  
+  log "Removing Upgrade object under etf_generator and campaign_generator from inventory"
+  for i in $(/usr/bin/litp /inventory show -rp | grep cmw | grep Upgrade | awk '{print $1}' | sort -u); do
+    /usr/bin/litp $i delete -f
+  done
+}
+
+
+### Stage: init_for_upgrade ###
+#
+# Any pre-install tasks
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+init_for_upgrade()
+{
+  new_puppet_runinterval=10
+  
+  log "Initializing ..."
+  _puppet_config_update $new_puppet_runinterval
+  if [ $? -eq 0 ]
+  then 
+  	log "Puppet configs was successfully updated with the runinterval = $new_puppet_runinterval value"
+  else
+    error "Puppet configuration files failed to update. Please check log for the reason."
+  fi
+}
+
+### Stage: log_verify ###
+#
+# Run /inventory verify and log results. Always returns success (Even if the verify fails).
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+log_verify()
+{
+  if [ ${LOGFILE} ] ; then
+    ${ECHO} "litp /inventory verify" >> ${LOGFILE}
+    ${LITP} /inventory verify >> ${LOGFILE}
+  else
+    ${ECHO} "litp /inventory verify"
+    ${LITP} /inventory verify
+  fi
+  # The return 0 is important; if the litp verify fails the error code of that would get returned.
+  return 0
+}
+
+### Stage: verify_inventory ###
+#
+# Run /inventory verify.
+# This stage will exit with an error code (and stop install/upgrade) if the verify fails
+# for any reason
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+verify_inventory()
+{
+  if [ ! ${LITP_ISO} ] && [ ! ${LITP_SP} ] ; then
+    log "No LITP ISO or Service Pack specified, skipping stage."
+    return 0
+  fi
+  log "Verifying inventory, this may take some time ..."
+  litp /inventory verify
+}
+
+### Stage: add_definition_updates ###
+#
+# Create a new TOR install xml file and diff the current landscape model.
+#   Add an new entries
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+add_definition_updates()
+{
+  if [ ! ${TOR_ISO} ] ; then
+    log "No TOR ISO specified, skipping stage."
+    return 0
+  fi
+  if [ ! -f ${TOR_ISO} ] ; then
+    error "${TOR_ISO} not found"
+    exit 1
+  fi
+  local _basedef_=${SCRIPT_HOME}/etc/tor_multi_blade_base_definition.xml
+  local _mergedef_=${SCRIPT_HOME}/etc/merged_tor_definition_upgrade.xml
+  local _versioneddef_=${SCRIPT_HOME}/etc/merged_tor_definition_upgrade_versioned.xml
+  if [ -f ${_mergedef_} ] ; then
+    ${RM} -f ${_mergedef_}
+  fi
+  log "Merging latest snippets to ${_mergedef_}"
+  ${PYTHON} ${XMLMERGERPY} -d ${_basedef_} -s ${SCRIPT_HOME}/etc/xml_snippets -o ${_mergedef_} >> ${LOGFILE} 2>&1
+  if [ $? -ne 0 ] ; then
+    error "Merge failed, see ${LOGFILE} for more details"
+    exit 1
+  fi
+  local _mp_=/mnt/temp.$$
+  mount_iso ${TOR_ISO} ${_mp_}
+  local _tor_sw_base_
+  _tor_sw_base_=`${FIND} ${_mp_}/products/TOR/ -type d \( ! -name TOR -prune \)`
+  if [ $? -ne 0 ] ; then
+    error "${_tor_sw_base_}"
+    umount_iso ${_mp_} yes
+    exit 1
+  fi
+  _tor_vrepo_=`get_iso_pkg_dir ${_mp_}`
+  if [ $? -ne 0 ] ; then
+    error "${_tor_vrepo_}"
+    exit 1
+  fi
+  local _vname_=`get_repo_name ${_tor_vrepo_}`
+  local _newrepo_=`get_repo_name ${_tor_vrepo_}`
+  log "Versioning merge from yum repo ${_newrepo_} and definition ${_mergedef_} to ${_versioneddef_} ..."
+  ${PYTHON} ${XMLVERSIONERPY} --repo ${_newrepo_} -d ${_mergedef_} -s ${_tor_sw_base_} -o ${_versioneddef_} >> ${LOGFILE} 2>&1
+  if [ $? -ne 0 ] ; then
+    error "Merge failed, see ${LOGFILE} for more details"
+    umount_iso ${_mp_} yes
+    exit 1
+  fi
+  umount_iso ${_mp_} yes
+  log "Diffing versioned (${_versioneddef_}) versus landscape ..."
+  local _commands_
+  _commands_=`${PYTHON} ${DEPPARSERPY} --file ${_versioneddef_} --format bash 2>&1`
+  local _rc_=$?
+  ${ECHO} "${_commands_}" >> ${LOGFILE}
+  if [ ${_rc_} -ne 0 ] ; then
+    error "${_commands_}"
+    exit 1
+  fi
+  local _tmp_=/tmp/updates.bsh
+  ${ECHO} "#!/bin/bash" > ${_tmp_}
+  ${ECHO} "${_commands_}" >> ${_tmp_}
+  ${BASH} ${_tmp_}
+  local _rc_=$?
+  #${RM} -f ${_tmp_}
+  if [ ${_rc_} -ne 0 ] ; then
+    exit ${_rc_}
+  fi
+  log "litp /definition/rd_users/storadm update lang=C" >> ${LOGFILE}
+  litp /definition/rd_users/storadm update lang=C 
+}
+
+### Stage: post_campaign_actions ###
+#
+# Any post campaign actions that need to take place i.e. once the plan start has completed
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+post_campaign_actions()
+{
+  cmw_configuration_persist
+  update_monitoring
+}
+
+### Stage: update_verion_file ###
+#
+# Update the version history file with upgrade version info
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_version_file()
+{
+  if [ ! ${TOR_ISO} ] ; then
+    log "No TOR ISO specified, skipping stage."
+    return 0
+  fi
+  update_tor_version ${TOR_ISO} 'upgrade'
+}
+
+### Stage: delete_cmw_lock_unlock_tasks ###
+#
+# Delete an cmw-lock/cmw-unlock tasks in an upgrade plan
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+delete_cmw_lock_unlock_tasks()
+{
+  local _depmgr_="/depmgr"
+  local _plans_
+  _plans_=`${LITP} ${_depmgr_} show -l | ${GREP} -vE "^\s+snapshot_"`
+  if [ $? -ne 0 ] ; then
+    error "${_plans_}"
+    exit 1
+  fi
+  for _plan_ in ${_plans_} ; do
+    ${PYTHON} ${LITPHELPERPY} --delete_cmw_locks_unlocks --plan_path ${_depmgr_}/${_plan_} 2>&1
+    if [ $? -ne 0 ] ; then
+      exit 1
+    fi
+  done
+}
+
+### Stage: delete_last2_cmw_lock_unlock_tasks ###
+#
+# Call this stage only in 1.0.17_3 to 1.0.19
+# Delete an cmw-lock/cmw-unlock tasks in an upgrade plan
+# that are around the static content update for each of SC nodes
+# This script assumes there are 2 cmw-lock/unlock tasks
+# per SC node in the plan.
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+delete_last2_cmw_lock_unlock_tasks()
+{
+  #set -x
+  if [ ! ${TOR_ISO} ] ; then
+    log "No TOR ISO specified, skipping stage."
+    return 0
+  fi
+  local _depmgr_="/depmgr"
+  local _plans_
+  _plans_=`${LITP} ${_depmgr_} show -l | ${GREP} -vE "^\s+snapshot_"`
+  if [ $? -ne 0 ] ; then
+    error "${_plans_}"
+    exit 1
+  fi
+
+  plan=$(echo "${_depmgr_}/${_plans_}" | sed 's/ //g') 
+
+  #we make sure there are 4 cmw-lock/unlock tasks (2 per node)
+  n=$(${LITP} ${plan} show plan | grep cmw-lock | wc -l)
+
+  if [ ${n} -ne 4 ]; then
+    error "Number of cmw-lock task found is different from 4"
+    error "Aborting further actions - exiting the stage with sucess, please check the plan manually"
+    exit 0
+  fi
+  
+  #select tasks to delete 
+  #cmw-lock
+  tasks=$(${LITP} ${plan} show plan | grep cmw-lock | tail -2 | awk '{print $1}' | xargs)
+  if [ "${tasks}xX" = "xX" ]; then
+    error "Could not find any cmw-lock task"
+    exit 1
+  fi
+  
+  for task in ${tasks}; do
+    t=$(${LITP} ${_depmgr_} find --name ${task} | sed 's/ //g')
+    if [ "${t}xX" = "xX" ]; then
+      error "Could not find task: ${t}"
+      exit 1
+    fi
+
+    ${LITP} ${t} delete
+    if [ $? -ne 0 ] ; then
+      error "Could not delete task: ${t}"
+      exit 1
+    fi
+    log "Deleted task: ${t}"
+  done
+        
+  #select tasks to delete 
+  #cmw-unlock
+  tasks=$(${LITP} ${plan} show plan | grep cmw-unlock | tail -2 | awk '{print $1}' | xargs)
+  if [ "${tasks}xX" = "xX" ]; then
+    error "Could not find any cmw-unlock task"
+    exit 1
+  fi
+  
+  for task in ${tasks}; do
+    t=$(${LITP} ${_depmgr_} find --name ${task} | sed 's/ //g')
+    if [ "${t}xX" = "xX" ]; then
+      error "Could not find task: ${t}"
+      exit 1
+    fi
+
+    ${LITP} ${t} delete
+    if [ $? -ne 0 ] ; then
+      error "Could not delete task: ${t}"
+      exit 1
+    fi
+    log "Deleted task: ${t}"
+  done
+}
+
+### Stage: delete_norb_snaps ###
+#
+# Deletes unwanted the snapshot create/restore tasks
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+delete_norb_snaps()
+{
+  local _depmgr_="/depmgr"
+  local _plans_
+  _plans_=`${LITP} ${_depmgr_} show -l | ${GREP} -vE "^\s+snapshot_"`
+  if [ $? -ne 0 ] ; then
+    error "${_plans_}"
+    exit 1
+  fi
+  local _norollback_fs_="/inventory/deployment1/ms1/ms_node/sfs/logstash,/inventory/deployment1/ms1/ms_node/sfs/no_rollback"
+  for _plan_ in ${_plans_} ; do
+    ${PYTHON} ${LITPHELPERPY} --delete_snapshot_tasks --plan_path ${_depmgr_}/${_plan_} \
+    --nas_service_list "${_norollback_fs_}" 2>&1
+    if [ $? -ne 0 ] ; then
+      exit 1
+    fi
+  done
+}
+
+
+### Stage: delete_lvm_ms_snaps_from_plan ###
+#
+# Deletes unwanted lvm snaps since a complete MS snapshot was already taken at a previous stage
+# This should be 'one time' usage stage during upgrade to 1.0.19/LITP CP4
+# After upgrade to CP4 the new LITP functionality (STORY-6265) should be used
+# https://team.ammeon.com/jira/browse/STORY-6265
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+delete_lvm_ms_snaps_from_plan()
+{
+  local _depmgr_="/depmgr"
+  local _plans_
+  _plans_=`${LITP} ${_depmgr_} show -l | ${GREP} -vE "^\s+snapshot_"`
+  if [ $? -ne 0 ] ; then
+    error "${_plans_}"
+    exit 1
+  fi
+  for _plan_ in ${_plans_} ; do
+    ${PYTHON} ${LITPHELPERPY} --delete_snapshot_tasks_ms --plan_path ${_depmgr_}/${_plan_}/upgrade_plan 2>&1
+    if [ $? -ne 0 ] ; then
+      exit 1
+    fi
+  done
+}
+
+
+_append_cmd()
+{
+  local _path_=$1
+  local _args_=$2
+  local _file_=$3
+  ${ECHO} "${LITP} ${_path_} show > /dev/null 2>&1" >> ${_file_}
+  ${ECHO} "if [ \$? -ne 0 ] ; then" >> ${_file_}
+  ${ECHO} " ${ECHO} \"Path ${_path_} not found\"" >> ${_file_}
+  ${ECHO} "fi" >> ${_file_}
+  ${ECHO} "${LITP} ${_path_} ${_args_}" >> ${_file_}
+  ${ECHO} "if [ \$? -ne 0 ] ; then" >> ${_file_}
+  ${ECHO} " exit 1" >> ${_file_}
+  ${ECHO} "fi" >> ${_file_}
+  ${ECHO} >> ${_file_}
+}
+
+### Stage: backup_jboss_cluster_addresses ###
+#
+# Backup the JBoss custer addresses as these get reset when a plan ins planned...
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+backup_jboss_cluster_addresses_plan()
+{
+  if [ ! ${TOR_ISO} ] ; then
+    log "No TOR ISO specified, skipping stage."
+    return 0
+  fi
+  log "Backing up JBoss multicast addresses to ${JBOSS_MCAST_RESTORE_SCRIPT}"
+  ${ECHO} "#!/bin/bash" > ${JBOSS_MCAST_RESTORE_SCRIPT}
+  ${ECHO} "set -u" >> ${JBOSS_MCAST_RESTORE_SCRIPT}
+  for _jee_ in `${LITP} /inventory/deployment1/cluster1/ find --resource jee-container` ; do
+    local _properties_
+    _properties_=`${LITP} ${_jee_} show properties`
+    if [ $? -ne 0 ] ; then
+      error "${_properties_}"
+      exit 1
+    fi
+    local _dm_=`${ECHO} "$_properties_}" | ${GREP} -E "^\s+default-multicast:" |  ${AWK} -F \" '{print $2}'`
+    if [ "${_dm_}" == "" ] ; then
+      error "No default-multicast value for ${_jee_}"
+      exit 1
+    fi
+    local _juma_=`${ECHO} "$_properties_}" | ${GREP} -E "^\s+jgroups-udp-mcast-addr:" |  ${AWK} -F \" '{print $2}'`
+    if [ "${_juma_}" == "" ] ; then
+      error "No jgroups-udp-mcast-addr value for ${_jee_}"
+      exit 1
+    fi
+    local _mga_=`${ECHO} "$_properties_}" | ${GREP} -E "^\s+messaging-group-address:" |  ${AWK} -F \" '{print $2}'`
+    if [ "${_mga_}" == "" ] ; then
+      error "No messaging-group-address value for ${_jee_}"
+      exit 1
+    fi
+    local _jmma_=`${ECHO} "$_properties_}" | ${GREP} -E "^\s+jgroups-mping-mcast-addr:" |  ${AWK} -F \" '{print $2}'`
+    if [ "${_jmma_}" == "" ] ; then
+      error "No jgroups-mping-mcast-addr value for ${_jee_}"
+      exit 1
+    fi
+    local _plan_jee_
+    _plan_jee_=`${ECHO} ${_jee_} | ${SED} -e "s|/inventory|/depmgr/tor_upgrade/new|g"`
+    if [ $? -ne 0 ] ; then
+      error "${_plan_jee_}"
+      exit 1
+    fi
+    _append_cmd "${_jee_}" "update default-multicast=${_dm_}" ${JBOSS_MCAST_RESTORE_SCRIPT}
+    _append_cmd "${_jee_}" "update jgroups-udp-mcast-addr=${_juma_}" ${JBOSS_MCAST_RESTORE_SCRIPT}
+    _append_cmd "${_jee_}" "update messaging-group-address=${_mga_}" ${JBOSS_MCAST_RESTORE_SCRIPT}
+    _append_cmd "${_jee_}" "update jgroups-mping-mcast-addr=${_jmma_}" ${JBOSS_MCAST_RESTORE_SCRIPT}
+    _append_cmd "${_plan_jee_}" "update default-multicast=${_dm_}" ${JBOSS_MCAST_RESTORE_SCRIPT}
+    _append_cmd "${_plan_jee_}" "update jgroups-udp-mcast-addr=${_juma_}" ${JBOSS_MCAST_RESTORE_SCRIPT}
+    _append_cmd "${_plan_jee_}" "update messaging-group-address=${_mga_}" ${JBOSS_MCAST_RESTORE_SCRIPT}
+    _append_cmd "${_plan_jee_}" "update jgroups-mping-mcast-addr=${_jmma_}" ${JBOSS_MCAST_RESTORE_SCRIPT}
+  done
+  ${BASH} -n ${JBOSS_MCAST_RESTORE_SCRIPT} > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    error ""
+    exit 1
+  fi
+  log "Created JBoss multicast restore script ${JBOSS_MCAST_RESTORE_SCRIPT}"
+}
+
+### Stage: restore_jboss_cluster_addresses ###
+#
+# Restore the JBoss custer addresses (these get reset when a plan ins planned...)
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+restore_jboss_cluster_addresses_plan()
+{
+  if [ ! ${TOR_ISO} ] ; then
+    log "No TOR ISO specified, skipping stage."
+    return 0
+  fi
+  if [ ! -f ${JBOSS_MCAST_RESTORE_SCRIPT} ] ; then
+    error "${JBOSS_MCAST_RESTORE_SCRIPT} not found"
+    exit 1
+  fi
+  log "Restoring JBoss multicast addresses from ${JBOSS_MCAST_RESTORE_SCRIPT}"
+  local _results_
+  _results_=`${BASH} ${JBOSS_MCAST_RESTORE_SCRIPT} 2>&1`
+  if [ $? -ne 0 ] ; then
+    error "${_results_}"
+    exit 1
+  fi
+  log "Restored JBoss multicast addresses."
+  if [ -f ${LOGFILE} ] ; then
+    ${ECHO} "${_results_}" >> ${LOGFILE}
+  else
+    ${ECHO} "${_results_}"
+  fi
+}
+
+### Stage: snapshot_lms ###
+#
+# Create LVM snapshots for the LMS via LITP
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+snapshot_lms()
+{
+#  if [ ! ${LITP_ISO} ] && [ ! ${LITP_SP} ] ; then
+#    log "No LITP ISO or Service Pack specified, skipping stage."
+#    return 0
+#  fi
+  _lvs_=`${LVS}`
+  if [ -f ${LOGFILE} ] ; then
+    ${ECHO} "Logical volumes pre-snapshot:" >> ${LOGFILE}
+    ${ECHO} "${_lvs_}" >> ${LOGFILE}
+  else
+    ${ECHO} "Logical volumes pre-snapshot:"
+    ${ECHO} "${_lvs_}"
+  fi
+  # WA for 1.0.19 upgrade
+  # Copying grub before snapshot for enabling complete ms restore from plan
+  ${ECHO} "Backing-up MS grub.conf" >> ${LOGFILE}
+  ${CP} /boot/grub/grub.conf /boot/grub/grub.conf.old
+  
+  litp ${LMS_INV_PATH} snapshot
+  _lvs_=`${LVS}`
+  if [ -f ${LOGFILE} ] ; then
+    ${ECHO} "Logical volumes post-snapshot:" >> ${LOGFILE}
+    ${ECHO} "${_lvs_}" >> ${LOGFILE}
+  else
+    ${ECHO} "Logical volumes post-snapshot:"
+    ${ECHO} "${_lvs_}"
+  fi
+}
+
+### Stage: cleanup_lms_snapshots ###
+#
+# Delete LVM snapshots for the LMS that were create via LITP
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+cleanup_lms_snapshots()
+{
+  _lvs_=`${LVS}`
+  if [ -f ${LOGFILE} ] ; then
+    ${ECHO} "Logical volumes pre-cleanup:" >> ${LOGFILE}
+    ${ECHO} "${_lvs_}" >> ${LOGFILE}
+  else
+    ${ECHO} "Logical volumes pre-cleanup:"
+    ${ECHO} "${_lvs_}"
+  fi
+  local _po_
+  log "litp ${LMS_INV_PATH} cleanup --json"
+  _po_=`litp ${LMS_INV_PATH} cleanup --json 2>&1`
+  local _rc_=$?
+  ${ECHO} ${_po_} >> ${LOGFILE}
+  if [ ${_rc_} -ne 0 ] ; then
+    ${ECHO} "${_po_}" | ${GREP} "There are no snapshots to delete" > /dev/null
+    if [ $? -eq 0 ] ; then
+      log "No LMS snapshots to delete."
+    else
+      error "Failed to cleanup LMS snapshots"
+      exit 1
+    fi
+  fi
+  _lvs_=`${LVS}`
+  if [ -f ${LOGFILE} ] ; then
+    ${ECHO} "Logical volumes post-cleanup:" >> ${LOGFILE}
+    ${ECHO} "${_lvs_}" >> ${LOGFILE}
+  else
+    ${ECHO} "Logical volumes post-cleanup:"
+    ${ECHO} "${_lvs_}"
+  fi
+}
+
+### Stage: restore_lms_from_snapshot ###
+#
+# Restore the LMS from snapshots
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+restore_lms_from_snapshot()
+{
+  ${LVS} -o lv_attr | ${TR} -d ' ' | ${GREP} -E "^s" > /dev/null 2>&1
+  if [ $? -ne 0 ] ; then
+    error "No LVM snapshots exist on the LMS, not possible to restore."
+    exit 1
+  fi
+  ${ECHO} -n "Restoring snapshots will cause a reboot, continue (yes/no): " | ${TEE} -a ${LOGFILE}
+  read _answer_
+  ${ECHO} "Answer is [${_answer_}]" >> ${LOGFILE}
+  if [ "${_answer_}" == "yes" ] ; then
+    litp ${LMS_INV_PATH} restore --json
+  else
+    log "Restore of LMS cancelled"
+    exit 1
+  fi
+}
+
+### Stage: restore_peers_from_snapshot ###
+#
+# Restore the peer nodes from snapshots taken via an upgrade plan
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+restore_peers_from_snapshot()
+{
+  local _plans_
+  _plans_=`${LITP} /depmgr/${UPGRADE_PLAN} show`
+  if [ $? -ne 0 ] ; then
+    error "No upgrade plan available"
+    exit 1
+  fi
+  ${ECHO} -n "Restoring snapshots will cause a cluster reboot, continue (yes/no): " | ${TEE} -a ${LOGFILE}
+  read _answer_
+  ${ECHO} "Answer is [${_answer_}]" >> ${LOGFILE}
+  if [ "${_answer_}" == "yes" ] ; then
+    litp /depmgr/${UPGRADE_PLAN} restore
+  else
+    log "Restore of peer nodes cancelled"
+    exit 1
+  fi
+}
+
+### Stage: update_rsyslog_conf ###
+#
+# Copy rsyslog configuration files to Puppet cmw-file directory
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_rsyslog_conf ()
+{
+  local _rc_ms_
+  local _rc_sc1_
+  local _rc_sc2_
+  local _10_tcp_queues_client_template_="/opt/ericsson/torinst/etc/10_tcp_queues_client.conf.template"
+  local _10_tcp_queues_server_template_="/opt/ericsson/torinst/etc/10_tcp_queues_server.conf.template"
+  local _10_tcp_queues_client_conf_="/opt/ericsson/torinst/etc/10_tcp_queues_client.conf"
+  local _10_tcp_queues_server_conf_="/opt/ericsson/torinst/etc/10_tcp_queues_server.conf" 
+  local _puppet_cmw_dir_="/opt/ericsson/nms/litp/etc/puppet/modules/cmw/files/"
+  
+  local _node1_hostname_=$(/usr/bin/litp /inventory/deployment1/cluster1/sc1/control_1/os/system show | awk -F\" '/hostname:/ {print $2}')
+  local _logstash_=logstashhost
+  
+  ${CP} ${_10_tcp_queues_client_template_} ${_10_tcp_queues_client_conf_}
+  ${CP} ${_10_tcp_queues_server_template_} ${_10_tcp_queues_server_conf_}
+  ${SED} -i "s/__node1_hostname__/${_node1_hostname_}/g" ${_10_tcp_queues_server_conf_}
+  ${SED} -i "s/%%logstash%%/${_logstash_}/g" ${_10_tcp_queues_client_conf_}
+  ${SED} -i "s/%%logstash%%/${_logstash_}/g" ${_10_tcp_queues_server_conf_}
+  
+  ${CP} ${_10_tcp_queues_client_conf_} ${_puppet_cmw_dir_}/
+  ${CP} ${_10_tcp_queues_server_conf_} ${_puppet_cmw_dir_}/
+  
+  ${SCP} ${_10_tcp_queues_server_conf_} sc-1:/etc/rsyslog.d/10_tcp_queues_server.conf
+  ${SSH} sc-1 "service rsyslog restart" >/dev/null
+
+  ${SCP} ${_10_tcp_queues_client_conf_} sc-2:/etc/rsyslog.d/10_tcp_queues_client.conf
+  ${SSH} sc-2 "service rsyslog restart" >/dev/null
+  
+  ${CP} ${_10_tcp_queues_client_conf_} /etc/rsyslog.d/10_tcp_queues_client.conf
+  service rsyslog restart >/dev/null
+  
+  ${RM} ${_10_tcp_queues_server_conf_}
+  ${RM} ${_10_tcp_queues_client_conf_}
+} 
+
+### Stage: sdp_import_workaround ###
+#
+# Copy camp_exec.py on ms as workaround for sdp import timeout issue HR64833
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+sdp_import_workaround ()
+{
+	orig_camp_exec_py="/opt/ericsson/nms/litp/lib/cmw/camp_exec.py"
+	new_camp_exec_py="/opt/ericsson/torinst/etc/workarounds/camp_exec.py"
+	
+	${CP} -p ${orig_camp_exec_py} ${orig_camp_exec_py}.orig
+	${CP} ${new_camp_exec_py} ${orig_camp_exec_py}
+} 
+
+### Stage: save_cluster_config ###
+#
+# Save cluster.conf and lde.pp configuration files
+# Function should be removed in 1.0.19
+# Arguments:
+#       None
+# Return Values:
+#       None
+save_cluster_config() 
+{
+  local _sc1_
+  _sc1_=$(${LITP} /inventory/deployment1/cluster1/sc1/control_1/os/system show | grep hostname | awk -F\" '{print $2}')
+  log "Saving cluster.conf and lde.pp configuration files"
+  ${CP} /opt/ericsson/nms/litp/etc/puppet/modules/cmw/manifests/lde.pp /opt/ericsson/torinst/etc/workarounds/
+  ${SCP} ${_sc1_}:/cluster/etc/cluster.conf /opt/ericsson/torinst/etc/workarounds/
+}
+
+### Stage: restore_cluster_config ###
+#
+# Restore cluster.conf and lde.pp configuration files saved in previous stage
+# Function should be removed in 1.0.19
+# Arguments:
+#       None
+# Return Values:
+#       None
+restore_cluster_config() 
+{
+  local _sc1_
+  local _sc2_
+  _sc1_=$(${LITP} /inventory/deployment1/cluster1/sc1/control_1/os/system show | grep hostname | awk -F\" '{print $2}')
+  _sc2_=$(${LITP} /inventory/deployment1/cluster1/sc2/control_2/os/system show | grep hostname | awk -F\" '{print $2}')
+  log "Restoring cluster.conf and lde.pp configuration files"
+  ${SSH} ${_sc1_} "service puppet stop" >/dev/null
+  ${SSH} ${_sc2_} "service puppet stop" >/dev/null
+  service puppet stop >/dev/null
+  service puppetmaster stop >/dev/null
+  ${CP} /opt/ericsson/torinst/etc/workarounds/lde.pp /opt/ericsson/nms/litp/etc/puppet/modules/cmw/manifests/
+  ${SCP} /opt/ericsson/torinst/etc/workarounds/cluster.conf ${_sc1_}:/cluster/etc/ 
+  service puppetmaster start >/dev/null
+  service puppet start >/dev/null
+  ${SSH} ${_sc1_} "service puppet start" >/dev/null
+  ${SSH} ${_sc2_} "service puppet start" >/dev/null
+}
+
+### Stage: update_logrotate_syslog ###
+#
+# Update logrotate syslog rule, adding setfacl option to postrotate rule
+# Upgrade path 1.0.17/2 to 1.0.17/3. It should be removed in 1.0.19
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_logrotate_syslog()
+{
+  local _rc_ms_
+  local _rc_sc1_
+  local _rc_sc2_
+  local _sc1_
+  local _sc2_
+  _sc1_=$(${LITP} /inventory/deployment1/cluster1/sc1/control_1/os/system show | grep hostname | awk -F\" '{print $2}')
+  _sc2_=$(${LITP} /inventory/deployment1/cluster1/sc2/control_2/os/system show | grep hostname | awk -F\" '{print $2}')
+  
+  log "Updating definition for logrotate/syslog rule"
+  /usr/bin/litp /definition/logrotate_rules/syslog update postrotate="service rsyslog restart || true; setfacl -m u:litpmgr:rw /var/log/messages"
+  /usr/bin/litp /definition/logrotate_server_rules/syslog update postrotate="service rsyslog restart || true; setfacl -m u:litpmgr:rw /var/log/messages"
+
+  while :; do
+    _rc_ms_=$(${GREP} setfacl /etc/logrotate.d/syslog)
+    _rc_sc1_=$(${SSH} ${_sc1_} "${GREP} setfacl /etc/logrotate.d/syslog")
+    _rc_sc2_=$(${SSH} ${_sc2_} "${GREP} setfacl /etc/logrotate.d/syslog")
+    if [[ ${_rc_ms_} =~ setfacl && ${_rc_sc1_} =~ setfacl && ${_rc_sc2_} =~ setfacl ]]; then
+      log "The logrotate/syslog rule was applied to ms and peer nodes"
+      break
+    else
+      log "The logrotate/syslog changes are being applied to ms and peer nodes"
+      sleep 15
+    fi
+  done
+}
+
+### Stage: mod_ssl_workaround ###
+#
+# Create a dummy ssl.conf file to avoid upgrade of mod_ssl rpm 
+# ***** Restarting landscape because of LITP-4402 bug *****
+# Upgrade path 1.0.17/3 to 1.0.19. 
+# Arguments:
+#       None
+# Return Values:
+#       None
+mod_ssl_workaround() 
+{
+  _sc1_=$(${LITP} /inventory/deployment1/cluster1/sc1/control_1/os/system show | grep hostname | awk -F\" '{print $2}')
+  _sc2_=$(${LITP} /inventory/deployment1/cluster1/sc2/control_2/os/system show | grep hostname | awk -F\" '{print $2}')
+
+  ${SSH} ${_sc1_} "echo \"#empty conf for disabling upgrade of ssl_mod configuration\" > /etc/httpd/conf.d/ssl.conf"
+  ${SSH} ${_sc2_} "echo \"#empty conf for disabling upgrade of ssl_mod configuration\" > /etc/httpd/conf.d/ssl.conf"
+}
+
+### Stage: delete_repositorymain ###
+#
+# Removing  repositorymain from definition as it is no longer required
+# repositorymain is introduced in CP4 as default, so need to delete previously defined to avoid duplication
+# TORD-976
+# Arguments:
+#       None
+# Return Values:
+#       None
+delete_repositorymain()
+{
+  /usr/bin/litp /definition/repositorymain delete
+  /usr/bin/litp /definition/deployment1/ms1/repositorymain delete
+  /usr/bin/litp /definition/deployment1/cluster1/sc1/repositorymain delete
+  /usr/bin/litp /definition/deployment1/cluster1/sc2/repositorymain delete
+  /usr/bin/litp /inventory/deployment1/ms1/repositorymain delete -f
+  /usr/bin/litp /inventory/deployment1/cluster1/sc2/repositorymain delete -f
+  /usr/bin/litp /inventory/deployment1/cluster1/sc1/repositorymain delete -f
+  /usr/bin/litp /definition materialise
+  /usr/bin/litp /inventory configure
+}
+
+### Stage: modify_jms_queues_topics_FM ###
+#
+# 
+# 
+# TORD-1003
+# Arguments:
+#       None
+# Return Values:
+#       None
+modify_jms_queues_topics_FM()
+{
+    if [ ! ${TOR_ISO} ] ; then
+		log "No TOR ISO specified, skipping stage."
+		return 0
+    fi
+	local _channelq_=/inventory/deployment1/cluster1/FMPMServ/su_0/fmserv_app/de/fm_mediation_channel_q/
+	/usr/bin/litp ${_channelq_} show > /dev/null 2>&1
+	if [ $? -eq 0 ] ; then
+		log "Modifying jms queues and topics in FM..."
+		/usr/bin/litp /definition/tor_sw/fmserv/de/fm_mediation_channel_q/ delete
+		/usr/bin/litp /definition/tor_sw/fmmedcom/de/jms_mediation_channel/ delete
+		/usr/bin/litp /inventory/deployment1/cluster1/FMPMServ/su_0/fmserv_app/de/fm_mediation_channel_q/ delete -f
+		/usr/bin/litp /inventory/deployment1/cluster1/FMPMServ/su_1/fmserv_app/de/fm_mediation_channel_q/ delete -f
+		/usr/bin/litp /inventory/deployment1/cluster1/MSFM/su_0/fmmedcom_app/de/jms_mediation_channel/ delete -f
+		/usr/bin/litp /inventory/deployment1/cluster1/MSFM/su_1/fmmedcom_app/de/jms_mediation_channel/ delete -f
+		/usr/bin/litp /definition/tor_sw/fmserv/de/fm_mediation_channel_t create jms-topic-def name="topic/fmalarmtopic,java:jboss/exported/jms/topic/fmalarmtopic" jndi="FMMediationChannel"
+		/usr/bin/litp /definition/tor_sw/fmmedcom/de/fm_mediation_channel_t create jms-topic-def name="topic/fmalarmtopic,java:jboss/exported/jms/topic/fmalarmtopic" jndi="FMMediationChannel"
+		/usr/bin/litp /definition/tor_sw/fmserv/de/jms_mediation_task_queue_0 create jms-queue-def name="queue/FmMediationtaskQueue_0,java:jboss/exported/jms/queue/FmMediationtaskQueue_0" jndi="FmMediationtaskQueue0"
+		/usr/bin/litp /definition/tor_sw/fmserv/de/jms_mediation_task_queue_1 create jms-queue-def name="queue/FmMediationtaskQueue_1,java:jboss/exported/jms/queue/FmMediationtaskQueue_1" jndi="FmMediationtaskQueue1"
+		/usr/bin/litp /definition/tor_sw/medcore/de/jms_mediation_task_queue_0 create jms-queue-def name="queue/FmMediationtaskQueue_0,java:jboss/exported/jms/queue/FmMediationtaskQueue_0" jndi="FmMediationtaskQueue0"
+		/usr/bin/litp /definition/tor_sw/medcore/de/jms_mediation_task_queue_1 create jms-queue-def name="queue/FmMediationtaskQueue_1,java:jboss/exported/jms/queue/FmMediationtaskQueue_1" jndi="FmMediationtaskQueue1"
+		/usr/bin/litp /definition materialise
+		/usr/bin/litp /inventory configure
+	else
+		log "Already done, skipping stage..."
+	fi
+}
+
+### Stage: update_rsyslog_startorder ###
+#
+# 
+# TORD-1013
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_rsyslog_startorder()
+{
+  local _host_
+  declare -i _start_priority_
+  for _host_ in sc-1 sc-2; do
+    _result_=$(${SSH} ${_host_} "${GREP} \"chkconfig: 2345 12 88\" /etc/init.d/rsyslog")
+    _start_priority_=$(${ECHO} ${_result_} | ${AWK} '{print $4}')
+    if (( $_start_priority_ == 12 )); then
+      ${ECHO} "The rsyslog startup priority will be changed on ${_host_} from S12 to S26"
+      ${SSH} ${_host_} "${SED} -i 's/chkconfig: 2345 12 88/chkconfig: 2345 26 88/' /etc/init.d/rsyslog"
+      (( $? != 0 )) && echo "ERROR: Failed to update start level in rsyslog LSB script"
+      ${SSH} ${_host_} "[[ -f /etc/rc2.d/S12rsyslog ]] && ${RM} /etc/rc2.d/S12rsyslog"
+      ${SSH} ${_host_} "[[ -f /etc/rc3.d/S12rsyslog ]] && ${RM} /etc/rc3.d/S12rsyslog"
+      ${ECHO} "Restarting rsyslog service on ${_host_}"
+      ${SSH} ${_host_} "${SERVICE} rsyslog restart" 
+    else
+      ${ECHO} "The rsyslog startup priority already set to S26"
+    fi
+  done
+}
+
+### Stage: update_litp_jboss ###
+#
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+update_litp_jboss()
+{
+  local _source_litp_jboss_="/opt/ericsson/torinst/etc/workarounds/litp_jboss.py"
+  local _dest_litp_jboss_="/opt/ericsson/nms/litp/lib/litp_jboss/litp_jboss.py"
+
+  ${SCP} ${_source_litp_jboss_} sc-1:${_dest_litp_jboss_}
+  ${SCP} ${_source_litp_jboss_} sc-2:${_dest_litp_jboss_}
+  ${SSH} sc-1 "chmod 755 ${_dest_litp_jboss_}"
+  ${SSH} sc-2 "chmod 755 ${_dest_litp_jboss_}"
+}
+
+### Stage: wait_for_all_to_apply ###
+#
+# TORD-1028
+# Arguments:
+#       None
+# Return Values:
+#       None
+wait_for_all_to_apply () 
+{
+  declare -i _rc_
+  while :; do
+    sleep 30
+    _rc_=$(litp /inventory/ show -rp | grep Applying | grep -vE '^\[|ericmon_config|cmw_cluster_config' | wc -l)
+    (( ${_rc_} == 0 )) && break
+    log "Inventory is being applied. Please wait..."
+  done
+  
+  log "Inventory has been successfully applied"
+}
+
+### Stage: apply_inventory ###
+#
+# Apply changes to /inventory
+#
+# Arguments:
+#       None
+# Return Values:
+#       None
+apply_inventory ()
+{
+  local _path_=/inventory
+  litp /cfgmgr apply scope=${_path_}
+}
+
+### Stage: httpd_workaround ###
+#
+# 
+# TORD-1044
+# Arguments:
+#       None
+# Return Values:
+#       None
+httpd_workaround()
+{
+  local _host_
+  for _host_ in sc-1 sc-2; do
+    _rc_=$(${SSH} ${_host_} "${AWK} '{ if (NR==331) print $1$2 }' /opt/ericsson/sso/bin/sso-heart-beat.sh")
+    if [[ ${_rc_} =~ "exit_script 0" ]]; then
+      log "Workaround is already applied on ${_host_}"
+      continue
+    fi
+    ${SSH} ${_host_} "${CP} /opt/ericsson/sso/bin/sso-heart-beat.sh /opt/ericsson/sso/bin/sso-heart-beat.sh.orig"
+    ${SSH} ${_host_} "${SED} -i '330a\\\texit_script 0' /opt/ericsson/sso/bin/sso-heart-beat.sh"
+    (( $? != 0 )) && { log "ERROR: Failed to update sso-heart-beat.sh"; exit 1; }
+    log "sso-heart-beat.sh updated in ${_host_}"
+  done
+}
+
+### Stage: upgrade_hyperic_agent_lms ###
+#
+# TORD-1057
+# Arguments:
+#       None
+# Return Values:
+#       None
+#
+# To be performed in upgrade to LITP CP9 
+#
+upgrade_hyperic_agent_lms()
+{
+  if [ ! ${LITP_ISO} ] ; then
+    log "No LITP ISO or Service Pack specified, skipping stage."
+    return 0
+  fi
+  ${YUM} list updates| ${GREP} -i hyperica
+  _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    log "no hyperic agent upgrade available exiting..."
+    return 0
+  fi 
+  ${YUM} -y update EXTRhyperica_CXP9021418.noarch
+      _rc_=$?
+  if [ ${_rc_} -ne 0 ] ; then
+    error "RPM EXTRhyperica_CXP9021418 failed to update, exiting."
+    return 1
+  fi
+  log "EXTRhyperica_CXP9021418 was successfully upgraded!"
+}
+
+
+### Stage: remove_ericmon_config ###
+#
+# TORD-1060
+# Arguments:
+#       None
+# Return Values:
+#       None
+#
+# To be performed before upgrade to do not lose monitoring data
+#
+remove_ericmon_config()
+{
+  local _path_=/inventory/deployment1/ms1/ericmon_config
+  ${LITP} ${_path_} show > /dev/null 2>&1
+  if [ $? -eq 0 ]
+  then
+	_result_=$(${LITP} ${_path_} delete -f 2>&1)
+	if [ $? -eq 0 ]
+	then
+		log "ericmon_config removed successfully."
+	else
+		error "ericmon_config failed to remove:"
+		error "${_result_}"
+		return 1
+	fi
+  else
+	log "ericmon_config does not exist."
+  fi
+}
+
+### Stage: update_hyperic_enclosure_username ###
+#
+# TORD-1061
+# Arguments:
+#       None
+# Return Values:
+#       None
+#
+# Update hyperic with the actual OA username
+#
+update_hyperic_enclosure_username()
+{
+  hyperic_=/opt/hyperic/hyperic-hqee-agent/bundles/agent-4.6.6/pdk/work/scripts/hpBladeEnclosure/onboardAdmin.exp
+  if ${GREP} "^set[[:space:]]userAtHost[[:space:]]\"root@" "${hyperic_}" 2>&1 >/dev/null
+  then
+  	log "Target to replace found in ${hyperic_}"
+  else
+  	log "Can't find target to replace in ${hyperic_}, probably it was updated already"
+  	return 0
+  fi
+  local _user_name_from_def=$(${LITP} /inventory/deployment1/systems/ show -r | ${GREP} '^[[:space:]]*.username:'|${HEAD} -1|${AWK} '{print $2}'|${AWK} -F\" '{print $2}')
+  if [ $? -eq 0 ]
+  then
+	${SED} -i "s/root/${_user_name_from_def}/g" "${hyperic_}"
+	log "${hyperic_} successfully updated with the actual user name"
+  else
+	error "Failed to find OA user name from topology."
+	return 1
+  fi
+}

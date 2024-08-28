@@ -1,0 +1,284 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson LMI                                    SCRIPT
+# ********************************************************************
+#
+# (c) Ericsson LMI 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson LMI. The programs may be used
+# and/or copied only with the written permission from Ericsson LMI or in accordance with the terms and conditions stipulated
+# in the agreement/contract under which the program(s) have been
+# supplied.
+#
+# ********************************************************************
+# Name    : check_snapshots.bsh
+# Date    : 17/09/2013
+# Revision: 1
+# Purpose : Monitor snapshot usage and send mail if limit exceeds.
+# Usage   : <script_name> <arguments>
+# Author(s) : Teemu Heikkinen
+# ********************************************************************
+
+LVSCAN=/sbin/lvscan
+LVDISPLAY=/sbin/lvdisplay
+AWK=/bin/awk
+GREP=/bin/grep
+SED=/bin/sed
+CUT=/bin/cut
+CAT=/bin/cat
+TEE=/usr/bin/tee
+SSH=/usr/bin/ssh
+RM=/bin/rm
+SENDMAIL=/usr/sbin/sendmail
+
+OPTION=$1
+OPTION2=$2
+CURRENT_time=`date '+%d.%m.20%y %H:%M:%S'`
+cd `dirname "$0"` && SCRIPT_PATH=`pwd`
+LOG_DIR=/var/log/torinst
+LOG_PATH=${LOG_DIR}/check_snapshots_tmp.log
+MAIL_PATH=${LOG_DIR}/check_snapshots.mail
+sessionLOG=${LOG_DIR}/check_snapshots.log
+
+#set email address to where to send the results. example below
+#static_email_add='john.doe@company.com'
+static_email_add=
+
+#set usage limit for an alarm. i.e. percentage of the whole snapshot
+alarm_limit=70
+
+#node list
+PEER_NODE1=sc-1
+PEER_NODE2=sc-2
+MWS=localhost
+
+# let's set send_mail_opt to false until a limit has reached for one snapshot
+send_mail_opt=false
+email_manual=false
+
+node_list="${MWS} ${PEER_NODE1} ${PEER_NODE2}"
+
+#add Subject and time to the log/mail
+printf "Subject: Snapshot size have exceeded the limit of ${alarm_limit} percent!!\n\n" > ${MAIL_PATH}
+printf "Snapshot usage check start time: ${CURRENT_time}\n" > ${LOG_PATH}
+printf "\n**********************************************************************************\n" >> ${sessionLOG}
+printf "**********************************************************************************\n" >> ${sessionLOG}
+printf "**********************************************************************************\n" >> ${sessionLOG}
+
+#check if the email address is set as an option
+
+email_manual_check(){
+if [ "${email_manual}" == "true" ] && [ "${OPTION2}" != "" ]
+ then
+  email_add=`echo ${OPTION2} | ${SED} 's/:/ /g'`
+ else
+  email_add=${static_email_add}
+fi
+}
+
+get_snapshot_info(){
+
+if [ $node == localhost ]
+ then
+  node_hostname=`hostname`
+ else
+  node_hostname=`${SSH} ${node} hostname`
+fi
+
+#set array for the snapshots overlapping the limit
+badARRAY=()
+#set result array for the snapshots overlapping the limit
+badresARRAY=()
+
+#set array for the snapshots within the limits
+goodARRAY=()
+#set result array for the snapshots within the limits
+goodresARRAY=()
+
+
+#get the list of the snapshots
+
+if [ $node == localhost ]
+ then
+  snapshot_list=`${LVSCAN} | ${GREP} Snapshot | ${AWK} '{print $3}' | ${SED} "s/'//g"`
+ else
+   snapshot_list=`${SSH} ${node} ${LVSCAN} | ${GREP} Snapshot | ${AWK} '{print $3}' | ${SED} "s/'//g"`
+fi
+
+#check all the snapshost
+for snapshot in ${snapshot_list}
+do
+ if [ $node == localhost ]
+  then
+    snap_actual_size=`${LVDISPLAY} ${snapshot}  | grep "Allocated to snapshot" | awk '{print $4}'`
+ else
+    snap_actual_size=`${SSH} ${node} "${LVDISPLAY} ${snapshot}"  | grep "Allocated to snapshot" | awk '{print $4}'`
+ fi
+
+ snap_shot_size=`echo ${snap_actual_size} | ${CUT} -f1 -d"."`
+
+ if [ ${snap_shot_size} -ge ${alarm_limit} ]
+  then
+	# add snapshot to bad array
+	badARRAY+=(${snapshot})
+	# add result to the array
+	badresARRAY+=(${snap_actual_size})
+
+  else
+	# add snapshot to good array
+	goodARRAY+=(${snapshot})
+	# add result to the array
+	goodresARRAY+=(${snap_actual_size})
+ fi	
+done
+}
+
+# print all indexes and associated values (goodARRAY)
+check_index(){
+ for value in ${!goodARRAY[*]}
+  do
+   index=`echo $value ${goodARRAY[$value]} | ${GREP} $item | ${AWK} '{print $1}'`
+	if [ "$index" != "" ]
+ 	then
+ 	 _index_=$index
+	fi
+done
+}
+
+check_index_bad(){
+ for value in ${!badARRAY[*]}
+  do
+   index=`echo $value ${badARRAY[$value]} | ${GREP} $item | ${AWK} '{print $1}'`
+        if [ "$index" != "" ]
+        then
+         _index_=$index
+        fi
+done
+}
+
+print_results(){
+
+printf "\n###################################################################\n" | ${TEE} -a ${LOG_PATH}
+printf "\033[1;37m	result for the host ${node_hostname}\033[m\n"
+printf "      result for the host ${node_hostname}\n" >> ${LOG_PATH}
+printf "###################################################################\n" | ${TEE} -a ${LOG_PATH}
+
+#print all the snapshots in the goodArray if the array is not empty
+if [ "${#goodARRAY[*]}" != "0" ]
+ then
+	printf "\n\033[1;32mthese are the snapshots within the usage limit (${alarm_limit}).\033[m\n"
+	printf "\nthese are the snapshots within the usage limit (${alarm_limit}).\n" >> ${LOG_PATH}
+	printf "snapshot-name                                      snapshot-usage\n" | ${TEE} -a ${LOG_PATH}
+	for item in ${goodARRAY[*]}
+ 	do
+	check_index
+	result=${goodresARRAY[$_index_]}
+	    printf "\033[1;37m%-50s %s\033[m\n" $item $result
+	    printf "%-50s %s\n" $item $result >> ${LOG_PATH}
+	 done
+fi
+
+#print all the snapshots in the badArray
+if [ "${#badARRAY[*]}" != "0" ]
+ then
+	printf "\n\033[35mthese snapshots have reached the the usage limit (${alarm_limit}).\033[m\n"
+	printf "\nthese snapshots have reached the the usage limit (${alarm_limit}).\n" >> ${LOG_PATH}
+        printf "snapshot-name                                      snapshot-usage\n" | ${TEE} -a ${LOG_PATH}
+	for item in ${badARRAY[*]}
+	do
+	check_index_bad
+	result=${badresARRAY[$_index_]}
+	    printf "\033[1;37m%-50s %s\033[m\n" $item $result
+	    printf "%-50s %s\n" $item $result >> ${LOG_PATH}
+	 done
+
+#let's set the sendmail option
+send_mail_opt=true
+
+fi
+
+# if there is no snapshots, make a printout
+if [ "${#goodARRAY[*]}" == "0" ] && [ "${#badARRAY[*]}" == "0" ]
+ then
+	printf "\n\033[1;37mthere is no snapshots on host ${node_hostname}.\033[m\n" 
+	printf "\nthere is no snapshots on host ${node_hostname}.\n" >> ${LOG_PATH}
+fi
+}
+
+#send mail if some snapshot exceeds the limit
+send_results(){
+
+#append temporary log to the mail
+${CAT} ${LOG_PATH} >> ${MAIL_PATH}
+
+if [ "${email_add}" != "" ]; then
+  printf "\nSending mail with the command:\n 'sendmail -v ${email_add} < ${MAIL_PATH}'\n" | ${TEE} -a ${LOG_PATH}
+  ${SENDMAIL} -v ${email_add} < ${MAIL_PATH}
+	if [ $? == 0 ]
+	 then
+	  printf "send mail successful\n" | ${TEE} -a ${LOG_PATH}
+	 else
+	  printf "send mail FAILED\n" | ${TEE} -a ${LOG_PATH}
+	fi
+
+else
+printf "\nWARNING: not sending mail because there was no email address defined.\n" | ${TEE} -a ${LOG_PATH}
+fi
+}
+
+cleanup(){
+
+#write session logs before the cleanup
+${CAT} ${LOG_PATH} >> ${sessionLOG}
+
+#remove mail message and temporary log file
+${RM} ${LOG_PATH}
+${RM} ${MAIL_PATH}
+
+}
+
+usage(){
+	echo "Usage: `basename $0` <option>
+	Options:
+	-h: Show this message
+	--mail: <email address1>:<email address2>:<email address3>"
+ 	}
+
+check_params(){
+
+case $OPTION in
+  mail|--m*|-m*) 
+		email_manual=true;; 
+
+  "")
+		;; #do nothing
+
+  *)
+	usage 
+	exit 0;;
+
+esac
+} 
+
+################
+##### Main #####
+################
+
+check_params
+email_manual_check
+
+#get the results from all the nodes in the node list and create a report
+for node in ${node_list}
+ do
+	get_snapshot_info
+	print_results
+done
+
+#send results by email in case the limit have exceeded
+if [ "${send_mail_opt}" == "true" ]
+ then
+  send_results
+fi
+
+cleanup

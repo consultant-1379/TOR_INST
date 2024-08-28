@@ -1,0 +1,373 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson LMI                                    SCRIPT
+# ********************************************************************
+#
+# (c) Ericsson LMI 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson LMI. The programs may be used
+# and/or copied only with the written permission from Ericsson LMI or in accordance with the terms and conditions stipulated
+# in the agreement/contract under which the program(s) have been
+# supplied.
+#
+# ********************************************************************
+# Name    : collect_tor_logs.bsh
+# Date    : 07/10/2013
+# Revision: 1
+# Purpose : collect logs
+# Usage   : <script_name> <arguments>
+# Author(s) : Teemu Heikkinen
+# ********************************************************************
+
+
+#variables
+PWD=/bin/pwd
+EXP=/usr/local/bin/expect
+SCP=/usr/bin/scp
+SHADOW=/etc/shadow
+CP=/bin/cp
+RM=/bin/rm
+ECHO=/bin/echo
+MKDIR=/bin/mkdir
+DIRNAME=/usr/bin/dirname
+HOSTname=`/bin/hostname`
+DATE=/bin/date
+BASENAME=/bin/basename
+GREP=/bin/grep
+AWK=/bin/awk
+SED=/bin/sed
+CUT=/bin/cut
+TAR=/bin/tar
+LS=/bin/ls
+SORT=/bin/sort
+TAIL=/usr/bin/tail
+HEAD=/usr/bin/head
+
+CURRENT_time=`${DATE} '+%H:%M:%S %d/%m/20%y'`
+
+# let's define the ../prechecker/bin/ path
+cd `${DIRNAME} "$0"` && SCRIPT_PATH=`pwd`
+
+#let's define the script related files and folders
+SCRIPT_NAME="`${BASENAME} $0`"
+DIR_PATH=`${DIRNAME} $SCRIPT_PATH`
+BACKUP_DIR="${DIR_PATH}/BACKUPS/collect_tor_logs/"
+BACKUPLIST_FILE="$DIR_PATH/etc/backuplist"
+BACKUPLIST="$DIR_PATH/etc/tmp_backuplist"
+_etc_hosts_=/etc/hosts
+litp_version_file=/opt/ericsson/nms/litp/.version
+tor_version_file=/opt/ericsson/torinst/.tor_version
+litp_version=`${HEAD} -1 ${litp_version_file} | ${AWK} '{print $3 "_v" $4}'`
+tor_version=`${GREP} "TOR Version" ${tor_version_file} | ${TAIL} -1 | ${AWK} '{print $1 "_v" $3}'`
+tar_file=${litp_version}_${tor_version}_backup.tar.gz
+
+OPTION=$1
+DIR_COUNTER=0
+COUNTER_MAX=7
+
+
+#Let's define the hosts
+SC1=sc-1
+SC2=sc-2
+LMS=ms1
+HOSTARRAY=( ${SC1} ${SC2} ${LMS} )
+
+#remove comments from the backuplist
+cat ${BACKUPLIST_FILE} | ${CUT} -f1 -d"#" |  ${SED} '/^$/d' > $BACKUPLIST
+
+#let's create BACKUP_DIR if not already exist
+if [ ! -d ${BACKUP_DIR} ]
+ then
+  printf "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- creating directory ${BACKUP_DIR}\n"
+  ${MKDIR} ${BACKUP_DIR}
+fi
+
+#let's define the working dir
+pushd ${BACKUP_DIR} > /dev/null 2>&1
+
+
+check_backup_2nd_column(){
+back_host_column=`${ECHO} "${filepath}" | ${AWK} '{print $2}'`
+	if [ "${back_host_column}" != "" ]
+	 then
+	  #create the list
+	  back_host_list=`${ECHO} ${back_host_column} | ${SED} 's/\:/ /g'`
+	fi
+
+	#check if node in the backuplist is defined in hostlist
+	for backup_host in $back_host_list
+	 do
+	  if [ "`${GREP} -w ${backup_host} ${_etc_hosts_}`" == "" ]
+	   then
+	    printf "${backup_host} not defined in file ${HOSTLIST}\n please check the file ${BACKUPLIST_FILE} \n"
+		exit 6	
+	  fi
+	 done
+}
+
+#function for checking and moving the current dirs
+
+rotate_dirs(){
+
+COUNTER_LIST=`${LS} ${BACKUP_DIR}| ${SORT} -rn`
+LAST_COUNTER=`${LS} ${BACKUP_DIR}| ${SORT} -n | ${TAIL} -1`
+
+if [[ "${LAST_COUNTER}" =~ ^[0-9]+$ ]]
+	then
+
+	 if [ "${LAST_COUNTER}" -ge "${COUNTER_MAX}" ]
+        	then
+		  printf "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- removing directory ${BACKUP_DIR}${LAST_COUNTER}\n"
+		  ${RM} -r ${BACKUP_DIR}${LAST_COUNTER}	
+       		  
+	 fi
+
+fi
+
+for COUNTER_NUM in ${COUNTER_LIST}
+        do
+        COUNTER_NUM_old=${COUNTER_NUM}
+        ((COUNTER_NUM++))
+
+        if  [[ "${COUNTER_NUM_old}" =~ ^[0-9]+$ ]] ; then
+                   #exec >&2; ${ECHO} "error: Not a number"; exit 1
+	 if [[ ${COUNTER_NUM_old} != ${COUNTER_MAX} ]]
+          then
+            mv ${BACKUP_DIR}${COUNTER_NUM_old} ${BACKUP_DIR}${COUNTER_NUM} >&2
+	 fi 
+        fi
+
+        done
+}
+
+create_counter_dir(){
+
+#create a backup counter folder for host if not exist
+
+COUNTER_DIR="${BACKUP_DIR}${DIR_COUNTER}/"
+
+if [ ! -d ${COUNTER_DIR} ]
+  then
+        printf "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- creating backup folder ${COUNTER_DIR}\n"
+        ${MKDIR} ${COUNTER_DIR}
+
+         if [[ $? != 0 ]]
+          then
+         # printf "creating folder failed\n"
+                exit 1
+         fi
+
+ fi
+
+
+}
+
+create_folders(){
+
+#create a backup folder for host if not exist
+
+HOST_FOLDER="${COUNTER_DIR}${HOSTname}/"
+
+
+ if [ ! -d ${HOST_FOLDER} ]
+  then
+        printf "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- creating backup folder ${HOST_FOLDER}\n"
+        ${MKDIR} ${HOST_FOLDER}
+
+         if [[ $? != 0 ]]
+          then
+         # printf "creating folder failed\n"
+                exit 1
+         fi
+
+ fi
+
+}
+
+
+
+
+bckup_on_multinode_exe(){
+
+
+#move the old backups and create new dir for the backups
+rotate_dirs
+create_counter_dir
+
+for _host_ in ${HOSTARRAY[*]}
+ do
+
+	HOSTIP=`${GREP} ${_host_} ${_etc_hosts_} | ${AWK} '{print $1}'`
+	HOSTname=${_host_}
+
+
+#check if interactive or using backlist file
+
+	#check if backlist exists
+	if [ ! -f $BACKUPLIST_FILE ]
+	then
+	printf "$BACKUPLIST_FILE missing.. exiting!!!\n"
+	 exit 1
+	else
+
+	   #if backlist exist loop and backup all the files in the list
+	   cat $BACKUPLIST | while read filepath
+	    do
+		#check if there is a second column in the backuplist
+		check_backup_2nd_column
+		
+
+
+		#call exe function
+                backup_exe
+
+		#printf "exit code is $? /n"
+		#check if the prvious loop have failed
+		if [[ $? != 0 ]]
+		 then
+#		  printf "check if the previous loop have failed\n"
+		  exit 3
+		fi
+	   done 
+	fi
+
+                #check if the prvious loop have failed
+                if [[ $? != 0 ]]
+                 then
+#                  printf "check if the previous loop have failed\n"
+		printf "\033[35msee above message for failure reason.\033[0m\n"
+                  exit 4 
+                fi
+
+
+done
+}
+
+backup_exe(){
+
+#define file path again.. this time only the first column
+filepath=`${ECHO} ${filepath} | ${AWK} '{print $1}'`
+
+#create a backup folder for host if not exist
+
+create_folders
+
+#check if earlier backup exists
+
+ FILE_base=`basename ${filepath}`
+
+        if [ -f ${HOST_FOLDER}${FILE_base}.orig ]
+         then
+         printf "${FILE_base} file backup limit reached for host ${HOSTname}.. exiting!!!\n"
+         exit 1
+        fi
+
+
+        if [ -f ${HOST_FOLDER}${FILE_base} ]
+         then
+	 printf "backing up  ${HOST_FOLDER}${FILE_base} ...\n"
+	${CP} ${HOST_FOLDER}${FILE_base} ${HOST_FOLDER}${FILE_base}.orig
+        fi
+
+
+# check if this file/folder  should be backed up for this node.
+
+ if [ "${back_host_column}" != "" ]
+  then
+        for backup_host in $back_host_list
+         do
+          if [ "${backup_host}" == "${HOSTname}" ] || [ "${backup_host}" == "${HOSTIP}" ]
+           then
+		copying_main
+	  fi
+	done
+  else
+	copying_main
+ fi
+}
+
+copying_main(){
+
+#start copying
+printf "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- copying file $FILE_base from host $HOSTname \n"
+printf "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- "
+
+if [[ "${HOSTname}" == "ms1" ]]
+ then
+  printf "${CP} ${filepath} ${HOST_FOLDER}\n"
+  ${CP} ${filepath} ${HOST_FOLDER}
+
+ else
+
+ expect << EOF
+ set timeout 20
+        spawn $SCP -qpr ${HOSTIP}:${filepath} ${HOST_FOLDER}
+        expect {
+                "Password: " {
+                send_user "passwordless connection not defined.. exiting!! \n"
+                exit 11
+                }
+                "scp: ${filepath}: No such file or directory" {
+                send_user "Please check the file or directory path you defined.. exiting!! \n"
+                exit 2
+                }
+                "Are you sure you want to continue connecting (yes/no)? " {
+                send "yes\r"
+                }
+                eof {exit}
+
+
+        }
+        expect {
+                "Password: " {
+                send_user "passwordless connection not defined.. exiting!! \n"
+                exit 11
+                }
+                "scp: ${filepath}: No such file or directory" {
+                send_user "Please check the file or directory path you defined.. exiting!! \n"
+                exit 2
+                }
+
+                eof {exit}
+        }
+
+
+
+        }
+expect juu
+exit
+EOF
+
+fi
+
+}
+
+#cleanup tmp files
+cleanup_lists(){
+
+#change dir
+pushd ${COUNTER_DIR} > /dev/null 2>&1
+${ECHO} "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- compressing all collected files to ${COUNTER_DIR}${tar_file}"
+${TAR} -cvzf ${tar_file} * > /dev/null 2>&1
+
+#${ECHO} "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- removing temporary directories"
+#remove everything else except the compressed file:
+for _host_directory_ in `${LS} | ${GREP} -v "${tar_file}"`
+ do
+  ${ECHO} "[`${DATE} '+%H:%M:%S %d/%m/20%y'`]- removing directory ${COUNTER_DIR}${_host_directory_}"
+  ${RM} -r ${_host_directory_}
+done
+
+#remove tmp backuplist
+if [ -f ${BACKUPLIST} ]
+ then
+  ${RM} ${BACKUPLIST}
+fi
+ 
+}
+
+#MAIN
+
+bckup_on_multinode_exe
+cleanup_lists

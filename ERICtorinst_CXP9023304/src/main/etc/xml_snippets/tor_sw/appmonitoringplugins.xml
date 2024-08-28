@@ -1,0 +1,10 @@
+<tor_sw>
+  <litp:component-def id="appmonitoringplugins">
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICappmonitoringplugins_CXP9030731</name>
+      <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

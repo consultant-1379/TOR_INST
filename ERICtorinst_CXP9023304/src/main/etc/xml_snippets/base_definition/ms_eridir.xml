@@ -1,0 +1,14 @@
+<litp:component-def  id="ms_eridir">
+ <litp:file-def id="ericsson_dir">
+                <ensure>directory</ensure>
+        <mode>774</mode>
+        <path>/ericsson</path>
+    </litp:file-def>
+    <litp:file-def id="eritor_dir">
+                <ensure>directory</ensure>
+        <group>litp_jboss</group>
+        <mode>774</mode>
+        <path>/ericsson/tor</path>
+        <recurse>true</recurse>
+    </litp:file-def>
+</litp:component-def>

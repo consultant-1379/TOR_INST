@@ -1,0 +1,122 @@
+<litp:component-def id="jboss_data_dir">
+  <litp:file-def id="FMPMServ_su_0_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/FMPMServ_su_0_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="MedCore_su_0_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/MedCore_su_0_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="MSFM_su_0_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/MSFM_su_0_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="MSPM0_su_0_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/MSPM0_su_0_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="MSPM1_su_0_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/MSPM1_su_0_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="UIServ_su_0_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/UIServ_su_0_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="FMPMServ_su_1_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/FMPMServ_su_1_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="MedCore_su_1_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/MedCore_su_1_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="MSFM_su_1_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/MSFM_su_1_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="MSPM0_su_1_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/MSPM0_su_1_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="MSPM1_su_1_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/MSPM1_su_1_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="UIServ_su_1_instance">
+    <ensure>directory</ensure>
+    <path>/var/ericsson/UIServ_su_1_jee_instance</path>
+  </litp:file-def>
+  <litp:file-def id="data_FMPMServ_su_0">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/FMPMServ_su_0_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_MedCore_su_0">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/MedCore_su_0_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_MSFM_su_0">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/MSFM_su_0_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_MSPM0_su_0">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/MSPM0_su_0_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_MSPM1_su_0">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/MSPM1_su_0_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_UIServ_su_0">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/UIServ_su_0_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_FMPMServ_su_1">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/FMPMServ_su_1_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_MedCore_su_1">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/MedCore_su_1_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_MSFM_su_1">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/MSFM_su_1_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_MSPM0_su_1">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/MSPM0_su_1_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_MSPM1_su_1">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/MSPM1_su_1_jee_instance/data</path>
+  </litp:file-def>
+  <litp:file-def id="data_UIServ_su_1">
+    <ensure>directory</ensure>
+    <group>litp_jboss</group>
+    <mode>774</mode>
+    <path>/var/ericsson/UIServ_su_1_jee_instance/data</path>
+  </litp:file-def>
+</litp:component-def>

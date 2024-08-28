@@ -1,0 +1,58 @@
+<tor_sw>
+  <litp:component-def id="static_content">
+    <litp:package-def id="container">
+      <ensure>latest</ensure>
+      <name>ERICprescontainer_CXP9030205</name>
+      <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+    <litp:package-def id="dms_help">
+      <ensure>latest</ensure>
+      <name>ERIChelp_CXP9030287</name>
+      <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+    <litp:package-def id="launcher">
+      <ensure>latest</ensure>
+      <name>ERIClauncher_CXP9030204</name>
+      <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+    <litp:package-def id="login">
+      <ensure>installed</ensure>
+      <name>ERIClogin_CXP9030307</name>
+	  <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+	<litp:package-def id="logviewer">
+      <ensure>installed</ensure>
+      <name>ERIClogviewer_CXP9030285</name>
+	  <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+	<litp:package-def id="datapath">
+      <ensure>installed</ensure>
+      <name>ERICdatapath_CXP9030305</name>
+      <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+    <litp:package-def id="uisdk_widgets_pkg">
+      <ensure>installed</ensure>
+      <name>ERICcomwidgets_CXP9030401</name>
+      <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+    <litp:package-def id="uisdk_webassets_pkg">
+      <ensure>installed</ensure>
+      <name>ERICwebassets_CXP9030402</name>
+      <repository/>
+      <version>%{Version}-%{Release}</version>
+    </litp:package-def>
+    <litp:package-def id="uisdk_jscore_pkg">
+      <ensure>installed</ensure>
+      <name>ERICjscore_CXP9030400</name>
+      <repository/>
+      <version>%{Version}-%{Release}</version>
+      </litp:package-def>
+  </litp:component-def>
+</tor_sw>

@@ -1,0 +1,17 @@
+<tor_sw>
+  <litp:component-def id="topsync">
+    <litp:deployable-entity-def id="de">
+      <app-type/>
+      <install-source/>
+      <name/>
+      <service>jboss_FMPMServ</service>
+      <version/>
+    </litp:deployable-entity-def>
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICtopsync_CXP9030160</name>
+      <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

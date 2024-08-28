@@ -1,0 +1,5 @@
+<litp:solution-def id="ms_node">
+  <litp:component-ref id="ddc">
+    <component-name>tor_sw/ddc</component-name>
+  </litp:component-ref>
+</litp:solution-def>

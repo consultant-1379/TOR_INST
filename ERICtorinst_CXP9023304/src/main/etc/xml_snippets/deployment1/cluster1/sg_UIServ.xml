@@ -1,0 +1,25 @@
+<litp:cluster-def id="cluster1">
+    <litp:service-group-def id="UIServ">
+        <availability_model>nway-active</availability_model>
+        <node_list>sc1,sc2</node_list>
+        <version>1.0.0</version>
+        <litp:notification-def id="pib_notification">
+          <binary>/opt/ericsson/dms/upgrade/healthcheck.sh</binary>
+          <timeout>180</timeout>
+          <user>litp_admin</user>
+        </litp:notification-def>
+        <litp:service-unit-def id="su">
+            <active-count>2</active-count>
+            <version>1.0.0</version>
+            <litp:component-ref id="jee">
+                <component-name>jee_containers/jee_MCUI</component-name>
+            </litp:component-ref>
+            <litp:component-ref id="pres_serv_app">
+                <component-name>tor_sw/pres_serv</component-name>
+            </litp:component-ref>
+            <litp:component-ref id="security_svc">
+                <component-name>tor_sw/security_svc</component-name>
+            </litp:component-ref>
+        </litp:service-unit-def>
+    </litp:service-group-def>
+</litp:cluster-def>

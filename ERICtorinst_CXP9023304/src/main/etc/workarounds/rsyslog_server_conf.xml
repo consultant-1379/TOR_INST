@@ -1,0 +1,21 @@
+<litp:component-def id="rsyslog_server_conf">
+	<litp:file-def id="rsyslog_server_dir">
+        <ensure>directory</ensure>
+        <path>/etc/rsyslog.d</path>
+    </litp:file-def>
+	<litp:file-def id="rsyslog_server_base_file">
+        <ensure>file</ensure>
+        <path>/etc/rsyslog.d/0_base.conf</path>
+        <source>puppet:///modules/cmw/0_base.conf</source>
+    </litp:file-def>
+	<litp:file-def id="rsyslog_server_tcp_file">
+        <ensure>file</ensure>
+        <path>/etc/rsyslog.d/10_tcp_queues_server.conf</path>
+        <source>puppet:///modules/cmw/10_tcp_queues_server.conf</source>
+    </litp:file-def>
+	<litp:file-def id="rsyslog_server_file">
+        <ensure>file</ensure>
+        <path>/etc/rsyslog.d/20_rsys_server.conf</path>
+        <source>puppet:///modules/cmw/20_rsys_server.conf</source>
+    </litp:file-def>
+</litp:component-def>

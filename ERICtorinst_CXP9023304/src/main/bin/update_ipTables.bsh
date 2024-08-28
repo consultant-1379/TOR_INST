@@ -1,0 +1,80 @@
+#!/bin/bash
+
+CP=/bin/cp
+DATE=/bin/date
+DIRNAME=/usr/bin/dirname
+ECHO=/bin/echo
+GETOPT=/usr/bin/getopt
+GREP=/bin/grep
+LITP=/usr/bin/litp
+MKDIR=/bin/mkdir
+TEE=/usr/bin/tee
+
+MSFW=/definition/os/osms
+SCFW=/definition/os/ossc
+ACTION="create firewalls-def"
+
+SC1InvFW=/inventory/deployment1/cluster1/sc1/control_1/os/
+SC2InvFW=/inventory/deployment1/cluster1/sc2/control_2/os/
+MS1InvFW=/inventory/deployment1/ms1/ms_node/os/
+
+STEP=0
+LOGDIR="/var/log/torinst"
+
+if [ ! -d "${LOGDIR}" ]; then
+    ${MKDIR} -p ${LOGDIR}
+fi
+LOGFILE="${LOGDIR}/landscape_firewall.log"
+if [ -f "${LOGFILE}" ]; then
+  _moddate_=`${DATE} +%Y%m%d_%H%M%S -r "${LOGFILE}"`
+  _prevlog_="${LOGFILE%.log}-${_moddate_}.log"
+  if [ -f "${_prevlog_}" ]; then  # in case ntp has reset time and log exists
+    _prevlog_="${LOGFILE%.log}-${_moddate_}_1.log"
+  fi
+  ${CP} "${LOGFILE}" "${_prevlog_}"
+fi
+
+> "${LOGFILE}"
+
+
+
+#
+# Get IP address for SC1 & SC2
+#
+sc1_address=$(litp /inventory/deployment1/cluster1/sc1/control_1/os/ip show | grep address | awk -F\" '{print $2}')
+sc2_address=$(litp /inventory/deployment1/cluster1/sc2/control_2/os/ip show | grep address | awk -F\" '{print $2}')
+
+#
+#  Open Ports 30000-65000 for FM on IP addresses of Peer blades
+#
+
+litp ${SCFW}/fw_fm_sc1 ${ACTION} name="4246 fmSC1address" dport="30000-65000"  source="${sc1_address}"
+litp ${SCFW}/fw_fm_sc2 ${ACTION} name="4247 fmSC1address" dport="30000-65000"  source="${sc2_address}"
+
+#
+# Drop packets sent to port 14000 on the peer blades
+#
+
+litp ${SCFW}/fw_14000_peer_udp ${ACTION} name="4248 peer14000 udp" proto="udp" action="drop" dport="14000"
+litp ${SCFW}/fw_14000_peer_tcp ${ACTION} name="4248 peer14000 tcp" proto="tcp" action="drop" dport="14000"
+
+#
+#  Open JBOSS MGMT port from MS so that we can run healthcheck towards Cluster
+#
+litp ${MSFW}/fw_jbossMgmt ${ACTION} name="107 Jboss Mgmt" dport="9990" proto="tcp"
+
+#materialize and push out in to inventory
+
+litp /definition/deployment1/cluster1/sc1 materialise
+litp /definition/deployment1/cluster1/sc2 materialise
+litp $(MSFW) materialise
+# configure & apply
+litp ${MS1InvFW} configure
+litp ${SC1InvFW} configure
+litp ${SC2InvFW} configure
+litp /cfgmgr apply scope=/inventory
+
+
+
+exit 0
+

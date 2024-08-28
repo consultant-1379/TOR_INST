@@ -1,0 +1,12 @@
+export MWS_LIST=10.59.133.100
+export DICTIONARY="'10.59.133.100':{
+'NFS_SHARE_LIST':[TORD3-rsyslog,TORD3-cluster,TORD3-logstash,TORD3-no_rollback,TORD3-hcdumps,TORD3-storobs_home,TORD3-storadm_home,TORD3-data],
+'NFS_SHARE_IP_LIST':[10.59.134.92,10.59.134.93,10.59.134.94],
+'SFS_CONNECTIVITY_INFO':[10.59.134.119,master,master,/var/NASService/locks/SFS/],
+'MWS_CONNECTIVITY_INFO':[10.59.133.100,root,12shroot,159.107.173.12],
+'SAN_GROUP_LIST':[LITP_TORD3_atrcxb2892_GRP,LITP_TORD3_atrcxb2894_GRP],
+'SAN_HOST_LIST':[LITP_TORD3_atrcxb2892_HST,LITP_TORD3_atrcxb2894_HST],
+'SAN_NODES_ILO_IP_LIST':[10.82.17.65,10.82.17.67],
+'SAN_NODES_ILO_USER_LIST':[root,root],
+'SAN_NODES_ILO_PASSWORD_LIST':[shroot12,shroot12],
+'SAN_CONNECTIVITY_INFO':[10.82.17.73,admin,password,global,/opt/Navisphere/bin/naviseccli]}"

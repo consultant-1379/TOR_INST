@@ -1,0 +1,66 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson Radio Systems AB
+# ********************************************************************
+#
+#
+# (c) Ericsson Radio Systems AB 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson Radio Systems AB, Sweden. The programs may be used
+# and/or copied only with the written permission from Ericsson Radio
+# Systems AB or in accordance with the terms and conditions stipulated
+# in the agreement/contract under which the program(s) have been
+# supplied.
+#
+# ********************************************************************
+# Name    : version
+# Date    : 04/04/2013
+# Revision: R1A01
+# Purpose : List the TOR SW Version (and upgrade history)
+#
+# Usage   : version
+#
+# ********************************************************************
+
+CAT=/bin/cat
+ECHO=/bin/echo
+DIRNAME=/usr/bin/dirname
+
+### Function: get_absolute_path ###
+#
+# Determine absolute path to software
+#
+# Arguments:
+#   none
+# Return Values:
+#   none
+get_absolute_path()
+{
+  _dir_=`${DIRNAME} $0`
+  SCRIPT_HOME=`cd ${_dir_}/../ 2>/dev/null && pwd || ${ECHO} ${_dir_}`
+}
+
+setup_env()
+{
+  get_absolute_path
+  if [ -f ${SCRIPT_HOME}/bin/common_functions.lib ] ; then
+    . ${SCRIPT_HOME}/bin/common_functions.lib
+  else
+    ${ECHO} "${SCRIPT_HOME}/bin/common_functions.lib not found!"
+    exit 2
+  fi
+}
+
+setup_env
+
+_versionfile_=`get_tor_version_file`
+if [ $? -ne 0 ] ; then
+  ${ECHO} "Failed to look up version file!"
+  exit 1
+fi
+if [ ! -f ${_versionfile_} ] ; then
+  ${ECHO} "${_versionfile_} not found!"
+  exit 2
+fi
+${CAT} ${_versionfile_}

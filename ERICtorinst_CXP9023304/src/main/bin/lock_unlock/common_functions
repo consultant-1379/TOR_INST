@@ -1,0 +1,1207 @@
+### Common Reusable Functions for TOR System Utility Package ###
+### ERICSSON 2013 ###
+
+### If you add a function please update the list below! ###
+
+### List of Functions  (Order of insertion..)
+#    
+# print()
+# check_rc()
+# check_dir_exists()
+# check_file_exists()
+# get_user_validation()
+# check_instance_locked()
+# check_instance_unlocked()
+# check_all_instances_locked()
+# check_all_instances_unlocked()
+# check_instances_not_instantiating()
+# check_instances_not_terminating()
+# lock_all_service_instances()
+# unlock_all_service_instances()
+# lock_service_instance()
+# unlock_service_instance()
+# wait_for_SI_lock()
+# wait_for_SI_unlock()
+# wait_for_su_unlock
+# wait_for_su_lock
+# wait_for_su_instantiate
+# print_instance_state()
+# print_unit_state()
+# delete_cluster_data()
+# run_pib_healthcheck()
+# get_full_SU_name()
+# get_full_SI_name()
+# restart_FM_communicator()
+# set_timeout()
+# check_timeout()
+# view_rops()
+# monitor_rops()
+# list_subNetworks()
+# set_MeContext()
+# get_full_NE_ID()
+# is_integer()
+# 
+#
+
+
+
+
+### Function: print ###
+#
+# Function that prints a message to the shell preceeded by its level of importance (DEBUG|INFO|ERROR)
+#
+# Arguments:
+#		arg1 - level of importance (DEBUG, INFO, ERROR)
+#		arg2 - message to print
+# Return Values:
+#       None 
+
+function print(){
+	if [ $# -ne 2 ]; then
+		return
+	fi
+
+	level=${1^^}
+	message="${2}\n"
+
+	if [ $level == "TRACE" ]; then
+		level_color=$green_text
+	elif [ $level == "DEBUG" ]; then
+		level_color=$cyan_text
+	elif [ $level == "INFO" ]; then
+		level_color=$white_text
+	elif [ $level == "WARNING" ]; then
+		level_color=$yellow_text
+	elif [ $level == "ERROR" ]; then
+		level_color=$red_text
+	else
+		level_color=$normal_text
+	fi
+
+	printf "${bold_text}${level_color} [$level] ${normal_text}$message\n"
+}
+
+
+
+
+### Function: check_rc ###
+#
+# Function that expects to be given a return code and a message to be printed if the rc is non-zero 
+# exits if non-zero is returned
+#
+# Arguments:
+#		arg1 - return code to check
+#		arg2 - error message to print if rc is not 0
+# Return Values:
+#		None
+
+function check_rc(){
+	if [ $# -ne 2 ]; then
+		print error "Two parameters expected for function check_rc(); $# received"
+		return
+	fi	
+	
+	if [ $1 -ne 0 ]; then
+		print error "$2 [rc = $1]"
+		exit 1
+	fi
+}
+
+
+
+
+
+### Function: check_dir_exists ###
+#
+# Function that checks if a dir exists
+#
+# Arguments:
+#		arg1 - absolute path to dir
+#		arg2 - custom error message to be displayed if dir doesn't exist (optional)
+# Return Values:
+#		0 - If exists
+#       1 - does not exit
+
+function check_dir_exists()
+{
+	if [ ! -d "$1" ]; then
+		if [ $# -eq 2 ]; then
+			print error "$2"
+			return 1
+		else
+			return 1
+		fi
+	else
+		return 0
+	fi
+}
+
+
+
+
+### Function: check_file_exists ###
+#
+# Function that checks if a file exists
+#
+# Arguments:
+#		arg1 - absolute path to dir
+#		arg2 - custom error message to be displayed if dir doesn't exist (optional)
+# Return Values:
+#		0 - If exists
+#       1 - does not exist
+
+function check_file_exists()
+{
+	if [ ! -f "$1" ]; then
+		if [ $# -eq 2 ]; then
+			print error "$2"
+			return 1
+		else
+			print error "Required file '$1' does not exist"
+			return 1
+		fi
+	else
+		return 0
+	fi
+}
+
+
+
+
+### Function: get_user_validation ###
+#
+# Function that prompts the user for a simple yes/no
+#
+# Arguments:
+#		None
+# Return Values:
+#       None 
+
+function get_user_validation(){
+	printf "$yellow_text Are you sure you wish to continue? $normal_text\n"
+	while true; do
+    	read -p "$yellow_text Enter y/n to continue: $normal_text" yn
+	    case $yn in
+	        [Yy]* ) return 0;;
+	        [Nn]* ) printf "$red_text User entered no.. Exiting $normal_text\n"; exit 1;;
+	        * ) printf "$yellow_tex Please enter y or n. $normal_text";;
+	    esac
+	done
+}
+
+
+
+
+
+### Function: check_instance_locked
+#
+# Function that checks if a service instance is locked
+# The amf presence state should be equal to 1 on both nodes
+# 
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		1 if neither service units have a presence state of "1"
+
+function check_instance_locked(){
+	local su0=$(get_full_SU_name $1 0)
+	local su1=$(get_full_SU_name $1 1)
+
+	local presence_su0=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $su0 -A4 | ${GREP} saAmfSUPresenceState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+	
+	local presence_su1=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $su1 -A4 | ${GREP} saAmfSUPresenceState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+
+	if [[ ${presence_su0} != 1 && ${presence_su1} != 1 ]]; then	
+		return 1
+	fi
+}
+
+
+
+
+
+### Function: check_instance_unlocked
+#
+# Function that checks if a service instance is unlocked
+# The amf presence state should be equal to 3 on both nodes
+# 
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		1 if neither service units have a presence state of "1"
+
+function check_instance_unlocked(){
+	local su0=$(get_full_SU_name $1 0)
+	local su1=$(get_full_SU_name $1 1)
+
+	local presence_su0=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $su0 -A4 | ${GREP} saAmfSUPresenceState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+	
+	local presence_su1=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $su1 -A4 | ${GREP} saAmfSUPresenceState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+
+	if [[ ${presence_su0} != 3 && ${presence_su1} != 3 ]]; then	
+		return 1
+	fi
+}
+
+
+
+
+
+### Function: check_all_instances_locked
+#
+# Function that checks if all service instances are locked
+# 
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		0 - If locked
+#       1 - If not locked
+
+function check_all_instances_locked(){
+	for INSTANCE in ${JBOSS_INSTANCES[@]}; do 
+		check_instance_locked ${INSTANCE}
+		if [[ $? = 1 ]]; then
+			print debug "${INSTANCE} is not locked"
+			return 1
+		fi 
+  	done	
+}
+
+
+
+
+### Function: check_all_instances_unlocked
+#
+# Function that checks if all service instances are unlocked
+# 
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		0 - If unlocked
+#       1 - If not unlocked
+
+function check_all_instances_unlocked(){
+	for INSTANCE in ${JBOSS_INSTANCES[@]}; do 
+		check_instance_unlocked ${INSTANCE}
+		if [[ $? = 1 ]]; then
+			return 1
+		fi 
+  	done		
+}
+
+
+
+
+
+### Function: check_instances_not_instantiating  ###
+#
+# Function that checks no service instances are in state of instantiaiting.
+#
+# Arguments:
+#       none
+# Return Values:
+#		0 - If true
+#       1 - If false
+
+function check_instances_not_instantiating(){
+	### Search and count the number of service units with presence state of INSTANTIATING. Remember to remove any possible matches with "UNINSTANTIATING"
+	local count=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} "FM|PM|Med|SSO|UI" -A4 | ${GREP} -v UNINSTANTIATING | ${GREP} -c INSTANTIATING`
+ 	if [ ${count} = 0 ]; then
+ 		return 0
+	else
+		return 1
+	fi 
+}
+
+
+
+
+### Function: check_instances_not_terminating  ###
+#
+# Function that checks no service instances are in state of terminating.
+#
+# Arguments:
+#       none
+# Return Values:
+#		0 - If true
+#       1 - If false
+
+function check_instances_not_terminating(){
+	local count=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} "FM|PM|Med|SSO|UI" -A4 | ${GREP} -c TERMINATING`
+ 	if [ ${count} = 0 ]; then
+ 		return 0
+	else
+		return 1
+	fi 
+}
+
+
+
+
+
+
+
+### Function: lock_all_service_instances
+#
+# Function that locks all service instances
+# 
+# Arguments:
+#		None
+#
+# Return Values:
+#		None
+	
+function lock_all_service_instances(){
+	print info "About to lock all Service Instances"
+	print info "Checking that no service instances are instantiating"
+		check_instances_not_instantiating
+		check_rc $? "service instances are in state of instantiating"
+	print info "Checking that all service instances are unlocked"
+		check_all_instances_unlocked
+		if [ $? -eq 1 ]; then
+			print warning "some service instances are already locked"
+			get_user_validation
+		fi
+
+	print info "Locking all Service Instances. NOTE: No particular order is necessary"
+		for INSTANCE in ${JBOSS_INSTANCES[@]}; do
+			
+			## Don't lock the instance if it is already locked
+			check_instance_locked ${INSTANCE}
+			local check=$?
+			if [ $check = 1 ]; then
+				# instance is not locked...
+				print info "Locking Service Instance ${INSTANCE}"
+				lock_service_instance ${INSTANCE}
+				sleep 25
+			fi
+		done	
+
+	print info "Finished locking all Service Instances. Now waiting for them to become uninstantiated - this may take some time! Progress can be tracked by running this command on a peer node: amf-state su | egrep -ie 'FMPM|MS|MED|UI|SSO' -A4 "
+
+	for INSTANCE in ${JBOSS_INSTANCES[@]}; do
+		wait_for_SI_lock ${INSTANCE}
+	done
+
+	print info "${green_text} All Instances Successfuly Locked ${normal_text}"
+}
+
+
+
+
+
+
+
+### Function: unlock_all_service_instances
+#
+# Function that unlocks all service instances in order
+# 
+# Arguments:
+#		None
+#
+# Return Values:
+#		None
+
+function unlock_all_service_instances(){
+	print info "About to unlock all Service Instances"
+	print info "Checking that service instances are not instantiating"
+		check_instances_not_instantiating
+		check_rc $? "service instances are in state of instantiating"
+
+	print info "Checking that service instances are not terminating"
+		check_instances_not_terminating
+		check_rc $? "service instances are in state of terminating"
+
+	print info "Checking that service instances are locked"
+		check_all_instances_locked
+		if [ $? -eq 1 ]; then
+			print warning "some service instances are already unlocked"
+			get_user_validation
+		fi 
+
+	print info "Unlocking all Service Instances in order"
+
+	## --------- Unlock FMPMServ First (with SU0 as active) as we need to deploy DPS DE before the others ------ ##
+
+	print debug "Locking FMPM Service Unit 1"
+	lock_service_unit FMPMServ 1
+	wait_for_SU_lock FMPMServ 1
+
+	print debug "Unlocking FMPM Service Instance"
+	unlock_service_instance FMPMServ
+
+	print debug "Waiting for FM Service Unit 0 to instantiate"
+	wait_for_SU_instantiate FMPMServ 0
+
+	print debug "Unlocking FMPM Service Unit 1"
+	unlock_service_unit FMPMServ 1
+	wait_for_SU_unlock FMPMServ 1
+
+ 	print debug "Waiting for FM service instance to unlock"
+	wait_for_SI_unlock FMPMServ
+
+	## --------- unlock the remaining instances starting with either MSPM0/MSPM1/MSFM as these contain PIB DE ------ ##
+	
+	for INSTANCE in ${JBOSS_INSTANCES[@]}; do
+		## Don't unlock the instance if it is already unlocked ##
+		check_instance_unlocked ${INSTANCE}
+		local check=$?
+		if [ $check = 1 ]; then
+			# instance is not unlocked..
+			print info "Unocking Service Instance ${INSTANCE}"
+			unlock_service_instance ${INSTANCE}
+			wait_for_SI_unlock ${INSTANCE}
+		fi
+	done
+
+
+	print info "Checking that all instances are fully unlocked and instaniated"
+		check_all_instances_unlocked
+		check_rc $? "Not all service instances are unlocked and instaniated"
+	print info "${green_text} All Instances Successfuly Unocked ${normal_text}"
+}
+
+
+
+
+
+
+
+## Function: lock_service_instance
+#
+# Function that locks a particular service instance
+#
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		None
+	
+function lock_service_instance(){
+	if [ $# -ne 1 ]; then
+		print error "1 parameter expected for lock_service_instance(); $# received"
+		return
+	fi	
+
+	local amf_instance_name=$(get_full_SI_name ${1})
+
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFADM} lock $amf_instance_name
+	check_rc $? "Got an error while trying to lock  $amf_instance_name. Ensure that it is not already locked or that it is spelt correctly..."	
+}
+
+
+
+
+
+
+### Function: unlock_service_instance
+#
+# Function that unlocks a particular service instance
+# 
+#
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		None
+
+function unlock_service_instance(){
+	if [ $# -ne 1 ]; then
+		print error "1 parameter expected for unlock_service_instance(); $# received"
+		return
+	fi	
+
+	local amf_instance_name=$(get_full_SI_name ${1})
+
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFADM} unlock $amf_instance_name
+	check_rc $? "Got an error while trying to unlock  $1. Ensure that it is not already unlocked or that it is spelt correctly...."
+}
+
+
+
+
+
+
+## Function: lock_service_unit
+#
+# Function that locks a particular service unit
+#
+# Example: lock_service_unit FMPMServ 0
+#
+# Arguments:
+#		arg1 - service unit
+#		arg2 - 0 or 1
+#
+# Return Values:
+#		None
+	
+function lock_service_unit(){
+	if [ $# -ne 2 ]; then
+		print error "2 parameters expected for lock_service_unit(); $# received"
+		return
+	fi	
+
+	local amf_unit_name=$(get_full_SU_name ${1} ${2})
+
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFADM} -t 180 lock $amf_unit_name
+	check_rc $? "Got an error while trying to lock  $amf_unit_name. Ensure that it is not already locked or that it is spelt correctly..."	
+}
+
+
+
+
+
+
+### Function: unlock_service_unit
+#
+# Function that unlocks a particular service unit
+# 
+#
+# Arguments:
+#		arg1 - service unit
+#		arg2 - 0 or 1
+#
+# Example: unlock_service_unit FMPMServ 0
+#
+# Return Values:
+#		None
+
+function unlock_service_unit(){
+	if [ $# -ne 2 ]; then
+		print error "2 parameters expected for unlock_service_unit(); $# received"
+		return
+	fi	
+
+	local amf_unit_name=$(get_full_SU_name ${1} ${2})
+
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFADM} -t 180 unlock $amf_unit_name
+	check_rc $? "Got an error while trying to unlock  $amf_unit_name. Ensure that it is not already unlocked or that it is spelt correctly...."
+}
+
+
+
+
+
+
+
+
+
+### Function: wait_for_SI_lock ###
+# 
+# Function that waits until a service instance has become fully locked
+# Presence state should return UNINSTANTIATED(1) for both nodes
+#
+# Arguments:
+#		arg1 - service instance
+# Return Values:
+#       None 
+
+function wait_for_SI_lock(){
+	check_instance_locked $1
+	local locked=$?
+
+	set_timeout ${TIMEOUT} ## script will time out and exit after this time
+
+	while [[ $locked = 1 ]]; do
+		check_timeout
+		print debug "waiting ${LOCK_TIMEOUT} seconds for $1 to lock"
+		sleep ${LOCK_TIMEOUT}
+		check_instance_locked $1
+		locked=$?
+	done
+}
+
+
+
+
+
+
+
+
+
+### Function: wait_for_SI_unlock
+#
+# Function that waits until a service instance has become fully unlocked
+# Presence state should return INSTANTIATED(3) for both nodes
+#
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		None
+
+function wait_for_SI_unlock(){
+	check_instance_unlocked $1
+	local unlocked=$?
+
+	set_timeout ${TIMEOUT}  ## script will time out and exit after this time
+
+	while [[ $unlocked = 1 ]]; do
+		check_timeout
+		print debug "waiting ${UNLOCK_TIMEOUT} seconds for $1 to unlock"
+		sleep ${UNLOCK_TIMEOUT}
+		check_instance_unlocked $1
+		unlocked=$?
+	done
+}
+
+
+
+
+
+### Function: wait_for_SU_unlock
+#
+# Function that waits until a particular service unit has become fully unlocked
+# Admin state should return UNLOCKED(1)
+#
+# Arguments:
+#		arg1 - name of service unit
+#		arg2 - 0 or 1
+# Return Values:
+#		None
+
+function wait_for_SU_unlock(){
+	if [ $# -ne 2 ]; then
+		print error "2 parameters expected for wait_for_SU_unlock(); $# received"
+		return
+	fi	
+
+	local amf_unit_name=$(get_full_SU_name ${1} ${2})
+
+
+	local admin=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $amf_unit_name -A4 | ${GREP} saAmfSUAdminState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+
+	set_timeout ${TIMEOUT}  ## script will time out and exit after this time
+
+	while [[ ${admin} != 1 ]]; do
+		check_timeout
+		print debug "Service unit not unlocked - waiting another ${UNLOCK_TIMEOUT} secs"
+		sleep ${UNLOCK_TIMEOUT}
+		admin=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $amf_unit_name -A4 | ${GREP} saAmfSUAdminState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+	done
+}
+
+
+### Function: wait_for_SU_lock
+#
+# Function that waits until a particular service unit has become fully locked
+# Admin state should return LOCKED(2)
+#
+# Arguments:
+#		arg1 - name of service unit
+#		arg2 - 0 or 1
+# Return Values:
+#		None#
+
+wait_for_SU_lock(){
+	if [ $# -ne 2 ]; then
+		print error "2 parameters expected for wait_for_SU_unlock(); $# received"
+		return
+	fi	
+
+	local amf_unit_name=$(get_full_SU_name ${1} ${2})
+
+	local admin=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $amf_unit_name -A4 | ${GREP} saAmfSUAdminState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+
+	set_timeout ${TIMEOUT}  ## script will time out and exit after this time
+
+	while [[ ${admin} != 2 ]]; do
+		check_timeout
+		print debug "Service unit not locked - waiting another ${LOCK_TIMEOUT} secs"
+		sleep ${LOCK_TIMEOUT}
+		admin=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $amf_unit_name -A4 | ${GREP} saAmfSUAdminState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+	done
+}
+
+
+
+
+
+
+
+
+
+### Function: wait_for_su_instantiate
+#
+# Function that waits until a particular service unit has become fully locked
+# Presence state should return INSTANTIATED(3)
+#
+# Arguments:
+#		arg1 - name of service unit
+#		arg2 - 0 or 1
+# Return Values:
+#		None#
+
+wait_for_SU_instantiate(){
+	if [ $# -ne 2 ]; then
+		print error "2 parameters expected for wait_for_SU_instantiate(); $# received"
+		return
+	fi	
+
+	local amf_unit_name=$(get_full_SU_name ${1} ${2})
+
+	local presence=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $amf_unit_name -A4 | ${GREP} saAmfSUPresenceState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+
+	set_timeout ${TIMEOUT}  ## script will time out and exit after this time
+
+	while [[ ${presence} != 3 ]]; do
+		check_timeout
+		print debug "Service unit not instantiated - waiting another ${UNLOCK_TIMEOUT} secs"
+		sleep ${UNLOCK_TIMEOUT}
+		presence=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} -ie $amf_unit_name -A4 | ${GREP} saAmfSUPresenceState | ${SED} -e 's/(/ /' -e 's/)/ /' | ${AWK} '{print $2}'`
+	done
+}
+
+
+
+
+
+
+
+
+
+### Function: print_instance_state
+#
+# Function that prints to screen the current status of a service instance
+#
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		None
+
+function print_instance_state(){
+	if [ $# -ne 1 ]; then
+		print error "1 parameter expected for print_instance_state(); $# received"
+		return
+	fi	
+	printf "\n`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} si | ${GREP} $1 -A2` \n \n"
+}
+
+
+
+
+
+
+### Function: print_unit_state
+#
+# Function that prints to screen the current status of a service unit
+#
+# Arguments:
+#		arg1 - service instance
+#
+# Return Values:
+#		None
+
+function print_unit_state(){
+	if [ $# -ne 1 ]; then
+		print error "1 parameter expected for print_unit_state(); $# received"
+		return
+	fi	
+	printf "\n`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${GREP} $1 -A4` \n \n"
+}
+
+
+
+
+
+
+### Function: delete_cluster_data ###
+#
+# Function to remove old and invalid JBOSS cluster configurations to recover the cluster 
+# Arguments:
+#		None
+# Return Values:
+#       None 
+
+function delete_cluster_data(){
+	print info "Checking to see if Service Instances are locked before removing the following directories:"
+	printf "/home/jboss/*/data \n/home/jboss/*/standalone/tmp \n/var/ericsson/log/jboss/ \n/tmp/sdk_configuration_parameters/ \n \n"
+	
+	check_all_instances_locked
+	check_rc $? "Some service instances are not locked"
+	
+	print info "All instances are locked, continuing to remove directories"
+	get_user_validation
+
+	print info "Removing /home/jboss/*/data on both peer nodes"
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} rm -rf /home/jboss/*/data
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE2} rm -rf /home/jboss/*/data
+	
+	print info "Removing /home/jboss/*/standalone/tmp on both peer nodes"
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} rm -rf /home/jboss/*/standalone/tmp
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE2} rm -rf /home/jboss/*/standalone/tmp
+	
+	print info "Removing /var/ericsson/log/jboss/ on both peer nodes"
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} rm -rf /var/ericsson/log/jboss/
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE2} rm -rf /var/ericsson/log/jboss/
+	
+	print info "Removing /tmp/sdk_configuration_parameters/ on both peer nodes"
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} rm -rf /tmp/sdk_configuration_parameters/
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE2} rm -rf /tmp/sdk_configuration_parameters/
+}
+
+
+
+
+### Function: run_pib_healthcheck ###
+#
+# Function to run pib healthcheck
+#
+# Arguments:
+#		None
+# Return Values:
+#       None 
+
+function run_pib_healthcheck(){
+	print info "Running PIB healthcheck ${PIB_HC} status --all --count"
+	local result=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${PIB_HC} status --all --count`
+	check_rc $? "Pib HC failed"
+	print info "Expected Result = ${EXPECTED_PIB_RESULT}"
+	print info "Actual Result = ${result}"
+	if [[ ${result} = ${EXPECTED_PIB_RESULT} ]]; then
+		print info "${green_text} PIB Healthcheck is correct ${normal_text}"
+	else
+		print error "PIB Healthcheck is incorrect"
+		exit 1
+	fi
+}
+
+
+
+
+
+### Function: get_full_SI_name
+#
+# Function that searches for the fully qualified amf service instance name
+#
+# example: get_full_SI_name FMPMServ
+#
+# Arguments:
+#		arg1 - name of service
+# Return Values:
+#       None 
+
+function get_full_SI_name(){
+	local instance_name=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} si | ${EGREP} $1`
+	echo "${instance_name}"
+}
+
+
+
+
+
+
+
+### Function: get_full_SU_name
+#
+# Function that searches for the fully qualified amf service unit name
+#
+# example: get_full_SU_name FMPMServ 0
+#
+# Arguments:
+#		arg1 - name of service
+#		arg2 - 0 or 1 to indicate (service unit 0 or service unit 1)
+# Return Values:
+#       None 
+
+function get_full_SU_name(){
+	if [ $# -ne 2 ]; then
+		print error "Two parameters expected for function get_full_SU_name(); $# received"
+		return
+	fi	
+	
+	# Verify that arg2 is either 0 or 1
+	if [[ $2 -ne 0 && $2 -ne 1 ]]; then
+		print error "2nd arg must be either 0 or 1. received $2"
+		return
+	fi
+
+	if [ $2 -eq 0 ]; then
+		local unitName=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} $1 | ${EGREP} SuType-0`
+	else
+		local unitName=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${AMFSTATE} su | ${EGREP} $1 | ${EGREP} SuType-1`
+	fi
+
+	echo "${unitName}"
+}
+
+
+
+### Function: restart_FM_communicator
+#
+# Function that restarts FM_communicator on the OSS
+#
+#
+# Arguments:
+#		None
+# Return Values:
+#       None
+
+function restart_FM_communicator(){
+	print info "Restarting FM_communicator on the OSS"
+	${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${SSH} ${SSH_NO_CHECKING} ${MASTERSERVICE} ${SMTOOL} -coldrestart FM_communicator -reason=other -reasontext=TORenabled  
+	check_rc $? "Failed to restart FM_communicator"
+	print info "FM_communicator restarted"
+}
+
+
+
+
+
+
+### Function: set_timeout()
+#
+# Function that sets a global endtime that can be later queried by the function check_timeout()
+# The current date is taken in seconds and the parameter is added on
+#
+#
+# Arguments:
+#		arg1 - time in seconds
+# Return Values:
+#       None
+
+function set_timeout(){
+	if [ $# -ne 1 ]; then
+			print error "One argument expected to set the timeout in seconds"
+			return 1
+	else
+		local current=`date +%s`
+		END=`echo $((current+=${1}))`
+	fi
+}
+
+
+
+
+
+
+### Function: check_timeout()
+#
+# Function that compares the current time (in seconds) to the global variable ${END}.
+# If the current time exceeds then the script will exit
+#
+# Arguments:
+#		None
+# Return Values:
+#       None
+
+function check_timeout(){
+	# Don't compare if end variable has not been set
+	if [ -z $END ]; then 
+		return
+	else
+		local current=`date +"%s"`
+		if [[ $current > $END ]]; then
+			print error "Timeout exceeded - ${TIMEOUT} seconds. Script exiting"
+			exit 1
+		fi
+	fi
+}
+
+
+
+
+### Function: view_rops()
+#
+# Function that prints to screen X number of ROPS for a given network element
+#
+# Arguments:
+#		arg1 - Network Element 
+# Return Values:
+#       None
+
+function view_rops(){
+	if [ $# -ne 1 ]; then
+		print error "One numerical parameter expected for function view_rops(); $# received"
+		return 1
+	else
+		list_subNetworks
+		set_SubNetwork
+		check_rc $? "Error setting SubNetwork - Is it spelt correctly?"
+		set_MeContext
+		check_rc $? "Error setting MeContext"
+
+		# Convert the given argument to a valid Network Element. i.e. 12=00012
+		local NE_ID=`echo $(get_full_NE_ID $1)`	
+		
+		is_integer $NE_ID
+		if [[ $? = 1 ]]; then
+			print error "Syntax error trying to parse arguments. Enter NE number between (1-160) for example"
+			exit 1
+		fi 
+
+		# Concatenate MeContext with NE ID
+		local network_element=${MeContext}${NE_ID}
+
+		print INFO "Retrieving the last ${NUM_ROPS} number of ROPS for ${green_text} ${network_element} ${normal_text}"
+		local command="${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${LS} -lrt ${SEGMENT1_PATH}${SUBNETWORK}MeContext\=${network_element} | ${TAIL} -${NUM_ROPS} | ${AWK} '{print \$6,\$7,\$8,\$9}'"
+		#print DEBUG "Running command : ${command}"
+		$command
+		check_rc $? "Could not retrieve ROPS for given network element ${network_element}"
+		print info "Current Time: `date +%T`"
+	fi
+}
+
+
+### Function monitor_rops()
+#
+# Function that uses "watch" command to continuously monitor the last X number of ROPS for a given network element
+#
+# Arguments:
+#		arg1 - Network Element#
+# Return Values:
+# 		None
+
+function monitor_rops(){
+	if [ $# -ne 1 ]; then
+		print error "One numerical parameter expected for function monitor_rops(); $# received"
+		return 1
+	else
+		list_subNetworks
+		set_SubNetwork
+		check_rc $? "Error setting SubNetwork - Is it spelt correctly?"
+		set_MeContext
+		check_rc $? "Error setting MeContext"
+
+		# Convert the given argument to a valid Network Element. i.e. 12=00012
+		local NE_ID=`echo $(get_full_NE_ID $1)`	
+		
+		is_integer $NE_ID
+		if [[ $? = 1 ]]; then
+			print error "Syntax error trying to parse arguments. Enter NE number between (1-160) for example"
+			exit 1
+		fi 
+
+		# Concatenate MeContext with NE ID
+		local network_element=${MeContext}${NE_ID}
+
+		print INFO "Monitoring the last ${NUM_ROPS} number of ROPS for ${green_text} ${network_element} ${normal_text}"
+		local command="${SSH} -t ${SSH_NO_CHECKING} ${PEER_NODE1} ${WATCH} '${LS} -lrt ${SEGMENT1_PATH}${SUBNETWORK}MeContext\=${network_element} | ${TAIL} -${NUM_ROPS}'"
+		#print DEBUG "Running command : ${command}"
+		$command
+		check_rc $? "Could not retrieve ROPS for given network element ${network_element}"
+	fi
+}
+
+
+### Function: list_subNetworks()
+#
+# Function that prints to screen all subnetworks under the directory ${SEGMENT1_PATH}
+# 	
+# Arguments:
+#		None 
+# Return Values:
+#       None
+
+function list_subNetworks(){
+	print info "List of available subnetworks for this system ${normal_text}"
+	${SSH} -t ${SSH_NO_CHECKING} ${PEER_NODE1} ${LS} ${SEGMENT1_PATH}
+	printf "\n"
+}
+
+
+
+### Function: set_SubNetwork()
+#
+# Function that sets global variable ${SUBNETWORK} to whichever SUBNETWORK is being used on the system i.e STGroup/ or ONRM_ROOT_MO_R/ or LTE14/
+# 	
+# Arguments:
+#		None 
+# Return Values:
+#       None
+
+function set_SubNetwork(){
+	read -p "${yellow_text}Enter SubNetwork: ${normal_text}" network
+
+	## Check to see if subnetwork exists
+	#print debug "Checking if Subnetwork exists under ${PEER_NODE1} ${SEGMENT1_PATH}"
+	
+	local count=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ${LS} ${SEGMENT1_PATH} | ${GREP} "${network}$" | ${WC} -l` 
+	if [ $count -eq 0 ]; then
+		return 1
+	else
+		SUBNETWORK="SubNetwork=${network}/"
+		return 0
+	fi
+}
+
+
+
+### Function: set_MeContext()
+#
+# Function that sets global variable ${MeContext} to whichever MeContext is being used on the system i.e LTE13ERBS or LTE14ERBS
+# 	
+# Arguments:
+#		None 
+# Return Values:
+#       None
+
+function set_MeContext(){
+	MeContext=`${SSH} ${SSH_NO_CHECKING} ${PEER_NODE1} ls ${SEGMENT1_PATH}${SUBNETWORK} | ${CUT} -c 11-19 | uniq`
+}
+
+
+
+
+
+### Function get_full_NE_ID
+# Used for the "view_rops" function. When searching for a Network element, the last 5 digits must identify the node.
+# i.e. if a user wants to view rops for Network Element 12 - this must equate to 00012
+# This function takes the user network i.e. 12 and returns 00012
+#
+# Arguments:
+#		arg1 - NE number
+# Return Values:
+#       None
+
+
+function get_full_NE_ID(){
+	if [ $# -ne 1 ]; then
+		print error "One parameters expected for function get_full_NE_ID(); $# received"
+		exit 1
+
+	else
+		local num_digits=`echo ${#1}`
+		if [ ${num_digits} -le 5 ]; then
+			local diff=`expr 5 - $num_digits`
+			if [ $diff = 1 ]; then
+				echo "0$1"
+				return 0
+			fi
+			if [ $diff = 2 ]; then
+				echo "00$1"
+				return 0
+			fi
+			if [ $diff = 3 ]; then
+				echo "000$1"
+				return 0
+			fi
+			if [ $diff = 4 ]; then
+				echo "0000$1"
+				return 0
+			fi
+		else
+			print error "Too many digits for function get_full_NE_ID(), NE ID has maximum of 5 digits"
+			exit 1
+		fi
+	fi
+}
+
+
+
+
+function is_integer(){
+	local regex='^[0-9]+$'
+	if ! [[ $1 =~ $regex ]] ; then
+		return 1
+	else
+		return 0
+	fi
+}
+
+

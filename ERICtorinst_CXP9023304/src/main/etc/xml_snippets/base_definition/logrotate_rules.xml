@@ -1,0 +1,16 @@
+<litp:component-def id="logrotate_rules">
+    <!-- rules to rotate logs on ms1 -->
+    <litp:logrotate-def id="syslog">
+        <compress>true</compress>
+        <create>false</create>
+        <dateext>true</dateext>
+        <dateformat>-%Y%m%d-%s</dateformat>
+        <delaycompress>true</delaycompress>
+        <name>syslog</name>
+        <path>/var/log/messages /var/log/secure /var/log/maillog /var/log/iptables.log /var/log/spooler /var/log/boot.log /var/log/cron</path>
+        <postrotate>service rsyslog restart || true</postrotate>
+        <rotate>6</rotate>
+        <sharedscripts>true</sharedscripts>
+        <size>100M</size>
+    </litp:logrotate-def>
+</litp:component-def>

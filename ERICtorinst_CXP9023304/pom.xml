@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<artifactId>TOR_INST</artifactId>
+		<groupId>com.ericsson.itpf.deployment</groupId>
+		<version>1.12.28-SNAPSHOT</version>
+	</parent>
+	<artifactId>ERICtorinst_CXP9023304</artifactId>
+	<packaging>${rpm.packaging}</packaging>
+       
+         <name>[${project.parent.artifactId}] CXP module</name>
+
+  <properties>
+    <com.ericsson.oss.rpm.architecture>noarch</com.ericsson.oss.rpm.architecture>
+    <!-- Install path = /${rpm-root}/${comp-name}/${install-path} -->
+    <rpm-root>opt</rpm-root>
+    <comp-name>ericsson</comp-name>
+    <install-path>torinst</install-path>
+    <publish_artifact>true</publish_artifact>
+  </properties>
+<build>
+<plugins> 
+<plugin>
+<groupId>org.codehaus.mojo</groupId>
+<artifactId>rpm-maven-plugin</artifactId>
+<extensions>true</extensions>
+<configuration>
+<skip>true</skip>
+<inherited>true</inherited>
+<copyright>2013 Ericsson AB All rights reserved</copyright>
+<description>${ericsson.rstate}</description>
+<group>ERI-NMS</group><requires>
+<require>python &gt;= 2.6</require></requires>
+<vendor>Ericsson AB</vendor><url>www.ericsson.com</url>
+<mappings>
+<mapping>
+<directory>/${rpm-root}/${comp-name}</directory>
+<filemode>775</filemode>
+<username>root</username>
+<groupname>root</groupname>
+</mapping>
+<mapping>
+<directory>/${rpm-root}/${comp-name}/${install-path}</directory>
+<filemode>775</filemode>
+<username>root</username>
+<groupname>root</groupname>
+</mapping>
+<mapping>
+<directory>/${rpm-root}/${comp-name}/${install-path}/bin</directory>
+<filemode>775</filemode>
+<username>root</username>
+<groupname>root</groupname>
+<configuration>false</configuration>
+<directoryIncluded>true</directoryIncluded>
+<recurseDirectories>true</recurseDirectories>
+<dependency />
+<sources>
+<source>
+<location>src/main/bin</location>
+<excludes>
+<exclude>**/*.pyc</exclude>
+<exclude>**/*.gitignore</exclude>
+</excludes>
+</source>
+</sources>
+</mapping>
+<mapping>
+<directory>/${rpm-root}/${comp-name}/${install-path}/etc</directory>
+<filemode>775</filemode>
+<username>root</username>
+<groupname>root</groupname>
+<configuration>false</configuration>
+<directoryIncluded>true</directoryIncluded>
+<recurseDirectories>true</recurseDirectories>
+<dependency />
+<sources>
+<source>
+<location>src/main/etc</location>
+<excludes>
+<exclude>**/*.pyc</exclude>
+<exclude>**/version.txt</exclude>
+<exclude>**/*.gitignore</exclude>
+<exclude>**/ETF.xml</exclude>
+<exclude>**/*.sql</exclude>
+</excludes>
+</source>
+</sources>
+</mapping>
+<mapping>
+<directory>/${rpm-root}/${comp-name}/${install-path}/lib</directory>
+<filemode>775</filemode>
+<username>root</username>
+<groupname>root</groupname>
+<configuration>false</configuration>
+<directoryIncluded>true</directoryIncluded>
+<recurseDirectories>true</recurseDirectories>
+<dependency />
+<sources>
+<source>
+<location>src/main/lib</location>
+<excludes>
+<exclude>**/*.pyc</exclude>
+<exclude>**/version.txt</exclude>
+<exclude>**/*.gitignore</exclude>
+<exclude>**/ETF.xml</exclude>
+<exclude>**/*.sql</exclude>
+</excludes>
+</source>
+</sources>
+</mapping>
+</mappings>
+
+</configuration>
+</plugin>
+</plugins>
+</build>
+</project>

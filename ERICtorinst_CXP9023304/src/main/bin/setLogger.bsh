@@ -1,0 +1,201 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson LMI                                    SCRIPT
+# ********************************************************************
+#
+# (c) Ericsson LMI 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson LMI. The programs may be used
+# and/or copied only with the written permission from Ericsson LMI or in accordance with the terms and conditions stipulated
+# in the agreement/contract under which the program(s) have been
+# supplied.
+#
+# ********************************************************************
+# Name    : setLogger.bsh
+# Date    : 1/5/2013
+# Revision: A.1
+# Purpose : Set logging levels on all JBoss instances
+#         : change logging levels on particular handlers
+#
+# Usage   : See usage() function.
+#
+# ********************************************************************
+#
+#   Command Section
+#
+# ********************************************************************
+AWK=/bin/awk
+CAT=/bin/cat
+CP=/bin/cp
+CUT=/bin/cut
+DATE=/bin/date
+DIRNAME=/usr/bin/dirname
+ECHO=/bin/echo
+GREP=/bin/grep
+LITP=/usr/bin/litp
+LS=/bin/ls
+LOGGER=/usr/bin/logger
+MKDIR=/bin/mkdir
+SORT=/bin/sort
+SSH=/usr/bin/ssh
+# ********************************************************************
+#
+#       Configuration Section
+#
+# ********************************************************************
+LOG_LEVEL="ERROR"
+LOGGER_LIST=("org.jgroups" "com.ericsson")
+JBOSS_INV_BASE_PATH="/inventory/deployment1/cluster1/"
+JBOSS_SERVER_BASE_PATH="/home/jboss/"
+
+# ********************************************************************
+#
+#   Functions
+#
+# ********************************************************************
+### Function: get_absolute_path ###
+#
+# Determine absolute path to software
+#
+# Arguments:
+#   none
+# Return Values:
+#   none
+
+get_absolute_path()
+{
+  _dir_=`${DIRNAME} $0`
+  SCRIPT_HOME=`cd ${_dir_}/../ 2>/dev/null && pwd || ${ECHO} ${_dir_}`
+}
+
+### Function: update_log_levels ###
+#
+# Updates all JBoss instances on all Nodes, Logger(s) in question to the Given Log Level
+#   Gets the system nodes from the get_controller_list function
+# Arguments:
+#   none
+# Return Values:
+#   none
+
+update_log_levels()
+{
+    _mn_list_=( `get_controller_list` )
+    if [ $? -ne 0 ] ; then
+        ${ECHO} "${_mn_list_}"
+        exit 1
+    fi
+    
+    # Get a list of ip address for the control nodes
+    _ctrl_ips_=()
+    for _mn_ in "${_mn_list_[@]}" ; do
+      _p_=`${LITP} ${_mn_} find --name ip`
+      _ip_=`get_property_value ${_p_} address`
+      _ctrl_ips_=( "${_ctrl_ips_[@]}" "${_ip_}" )
+    done
+    
+    local _jboss_list_
+    _jboss_list_=( `${LITP} ${JBOSS_INV_BASE_PATH} find --name instance` )
+    if [ $? -ne 0 ] ; then
+      ${ECHO} "${_jboss_list_}"
+      exit 1
+    fi
+    for _jboss_ in "${_jboss_list_[@]}" ; do
+       _path_=`${AWK} -F/ '{print "/home/jboss/"$5"_"$6"_"$7"_"$8}' <<< "${_jboss_}"`
+      _fc_=0
+      for _ctrlip_ in "${_ctrl_ips_[@]}" ; do
+        ${SSH} ${_ctrlip_} "${LS} ${_path_}/bin/jboss-cli.sh" > /dev/null 2>&1
+        if [ $? -ne 0 ] ; then
+          _fc_=$(( _fc_ + 1 ))
+# The instance isn't installed, skip to the next host
+          continue
+        fi
+        _jboss_address_=`get_property_value ${_jboss_}/ip address`
+        for _logger_ in "${LOGGER_LIST[@]}" ; do
+# Check if logger exist there
+          _test_=`${SSH} ${_ctrlip_} "${_path_}/bin/jboss-cli.sh --controller=${_jboss_address_}:9999 -c --command=\"/subsystem=logging/logger=${_logger_}:read-resource\" "`
+          if [ $? -ne 0 ] ; then
+            ${ECHO} "No logger '${_logger_}' exist for ${_jboss_} skipping..."
+            continue
+          fi
+          _res_=`${SSH} ${_ctrlip_} "${_path_}/bin/jboss-cli.sh --controller=${_jboss_address_}:9999 -c --command=\"/subsystem=logging/logger=${_logger_}:change-log-level(level=${LOG_LEVEL})\" 2>&1"`
+          if [ $? -ne 0 ] ; then
+            ${ECHO} "Failed to update logger '${_logger_}' to level '${LOG_LEVEL}' for ${_jboss_}"
+            ${ECHO} "${_res_}"
+            exit 1
+          fi
+          ${ECHO} "Updated logger '${_logger_}' to level '${LOG_LEVEL}' for ${_jboss_}"
+        done
+      done
+    done
+}
+
+### Function: Usage ###
+#
+# Info Function
+# Arguments:
+#  none
+# Return Values:
+#   none
+usage()
+{
+echo "Note: This script updates all JBoss instances with given Log Level "
+echo "If no arguments are given it will update the default loggers:"
+echo "com.ericsson and org.jgroups to ERROR"
+echo ""
+echo " OPTIONS:"
+echo "-s takes the following arguments and sets the log level with them"
+echo "======================================"
+echo "OFF"
+echo "FATAL"
+echo "ERROR"
+echo "WARN"
+echo "INFO"
+echo "DEBUG"
+echo "TRACE"
+echo "======================================"
+echo "-l takes a configured JBoss log handler and"
+echo "changes the logger to be changed to that logger ie: com.ericsson"
+exit 1
+}
+### Function: Main ###
+#
+# Parent Function which runs all others
+# Arguments:
+#   Optional: -s=logging level -l=logger
+# Return Values:
+#   none
+main()
+{
+ while getopts ":s:hl:" Option; do
+        case "${Option}" in
+                s)
+                        LOG_LEVEL=${OPTARG^^}
+                        [[ $LOG_LEVEL = "OFF" || $LOG_LEVEL = "FATAL" || $LOG_LEVEL = "ERROR" || $LOG_LEVEL = "WARN" || $LOG_LEVEL = "INFO" || $LOG_LEVEL = "DEBUG" || $LOG_LEVEL = "TRACE" ]] || usage
+                ;;
+                h)
+                        usage
+                ;;
+                l)
+                        LOGGER_LIST=( $OPTARG )
+                ;;
+                *)
+                        printf "Not recognized argument \n\n"
+                        usage
+                ;;
+        esac
+done
+shift $((OPTIND - 1))
+
+get_absolute_path
+_cfl_=${SCRIPT_HOME}/bin/common_functions.lib
+if [ ! -f ${_cfl_} ] ; then
+  ${ECHO} "Cant find ${_cfl_}"
+  exit 1
+else
+  . ${_cfl_}
+fi
+update_log_levels
+}
+
+main $*

@@ -1,0 +1,35 @@
+###################################
+Export the content of the txt file export_cleandown.txt  after correcting it for your own deployment
+###################################
+
+
+export DICTIONARY="'10.59.132.124':{
+'NFS_SHARE_LIST':[atmws40_cluster,storobs_home_atmws40,storadm_home_atmws40],
+'NFS_SHARE_IP_LIST':[10.59.132.124,10.59.132.158,10.59.132.153],
+'SFS_CONNECTIVITY_INFO':[10.59.134.28,master,master,/var/NASService/locks/SFS/],
+'MWS_CONNECTIVITY_INFO':[10.59.132.124,root,12torrv,159.107.173.12],
+'SAN_GROUP_LIST':[LITP_Site1Atmws40_SC-1_GRP,LITP_Site1Atmws40_SC-2_GRP],
+'SAN_HOST_LIST':[LITP_Site1Atmws40_SC-1_HST,LITP_Site1Atmws40_SC-2_HST],
+'SAN_NODES_ILO_IP_LIST':[10.45.211.72,10.45.211.73],
+'SAN_NODES_ILO_USER_LIST':[root,root],
+'SAN_NODES_ILO_PASSWORD_LIST':[shroot12,shroot12],
+'SAN_CONNECTIVITY_INFO':[10.45.211.176,root,shroot12,global,/opt/Navisphere/bin/naviseccli]}"
+
+
+#Catch the SAN_GROUP_LIST & SAN_HOST_LIST as follows:
+#grep -ri LITP_Site1 /var/log/messages* | grep -i GRP
+#grep -ri LITP_Site1 /var/log/messages* | grep -i HST
+
+
+
+
+Run in the python script to delete Clariion Content and SFS Files/Shares
+#####################################################
+
+python mws_prepare.py defaultMB
+
+#########Clean down the SFS shares and FS###########
+python mws_prepare.py nfs_delete
+
+See following for more detail..
+https://team.ammeon.com/confluence/display/~david.dobias/Guide+to+US+2104

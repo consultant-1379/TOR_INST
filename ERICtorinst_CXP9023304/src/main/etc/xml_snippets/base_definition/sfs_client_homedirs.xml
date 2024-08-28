@@ -1,0 +1,15 @@
+  <litp:component-def id="sfs_client_homedirs">
+    <litp:nas-client-def id="sfs_share_ddc_data">
+      <mountpoint>/var/ericsson/ddc_data</mountpoint>
+    </litp:nas-client-def>
+    <litp:nas-client-def id="sfs_share_storadm">
+      <mountpoint>/opt/ericsson/storage/user/nas/storadm</mountpoint>
+    </litp:nas-client-def>
+    <litp:nas-client-def id="sfs_share_storobs">
+      <mountpoint>/opt/ericsson/storage/user/nas/storobs</mountpoint>
+    </litp:nas-client-def>
+	<litp:nas-client-def id="sfs_share_hcdumps">
+      <mountpoint>/ericsson/tor/dumps</mountpoint>
+    </litp:nas-client-def>
+  </litp:component-def>
+

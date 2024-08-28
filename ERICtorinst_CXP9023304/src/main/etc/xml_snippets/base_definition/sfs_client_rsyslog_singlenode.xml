@@ -1,0 +1,7 @@
+    <litp:component-def id="sfs_client_rsyslog_singlenode">
+        <litp:nas-client-def id="sfs_share_rsyslog">
+            <mountpoint>/var/log/central</mountpoint>
+            <service>sfs_client_rsyslog</service>
+        </litp:nas-client-def>
+    </litp:component-def>
+

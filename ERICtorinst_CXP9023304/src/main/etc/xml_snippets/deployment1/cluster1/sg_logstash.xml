@@ -1,0 +1,14 @@
+<litp:cluster-def id="cluster1">
+  <litp:service-group-def id="logstash">
+    <availability_model>2n</availability_model>
+    <node_list>sc1,sc2</node_list>
+    <version>1.0.1</version>
+    <litp:service-unit-def id="su">
+      <active-count>1</active-count>
+      <version>1.1.1</version>
+      <litp:component-ref id="logstash">
+        <component-name>tor_sw/logstash</component-name>
+      </litp:component-ref>
+    </litp:service-unit-def>
+  </litp:service-group-def>
+</litp:cluster-def>

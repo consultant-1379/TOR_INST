@@ -1,0 +1,18 @@
+<tor_sw>
+  <litp:component-def id="pib">
+    <litp:deployable-entity-def id="de">
+      <app-type/>
+      <install-source/>
+      <name/>
+      <run-level>15</run-level>
+      <service>jboss_FMPMMS</service>
+      <version/>
+    </litp:deployable-entity-def>
+    <litp:package-def id="pkg">
+      <ensure>installed</ensure>
+      <name>ERICpib_CXP9030194</name>
+	  <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

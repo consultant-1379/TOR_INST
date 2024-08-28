@@ -1,0 +1,56 @@
+<tor_sw>
+  <litp:component-def id="apache_server">
+    <litp:lsb-service-def id="httpd_service">
+      <name>httpd</name>
+      <require>apache_pkg,mod_ssl_pkg,sso_pa_pkg</require>
+     <litp:ip-address-def id="ip"/>
+    </litp:lsb-service-def>
+    <litp:package-def id="apache_pkg">
+      <ensure>installed</ensure>
+      <name>httpd</name>
+      <repository>OS</repository>
+    </litp:package-def>
+    <litp:package-def id="apr_pkg">
+      <ensure>installed</ensure>
+      <name>apr</name>
+      <repository>OS</repository>
+    </litp:package-def>
+    <litp:package-def id="apr_util_ldap_pkg">
+      <ensure>installed</ensure>
+      <name>apr-util-ldap</name>
+      <repository>OS</repository>
+    </litp:package-def>
+    <litp:package-def id="apr_util_pkg">
+      <ensure>installed</ensure>
+      <name>apr-util</name>
+      <repository>OS</repository>
+    </litp:package-def>
+    <litp:package-def id="httpd_tools_pkg">
+      <ensure>installed</ensure>
+      <name>httpd-tools</name>
+      <repository>OS</repository>
+    </litp:package-def>
+    <litp:package-def id="mailcap_pkg">
+      <ensure>installed</ensure>
+      <name>mailcap</name>
+      <repository>OS</repository>
+    </litp:package-def>
+    <litp:package-def id="mod_cluster">
+      <ensure>installed</ensure>
+      <name>ERICpsmc_CXP9030290</name>
+      <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+    <litp:package-def id="mod_ssl_pkg">
+      <ensure>installed</ensure>
+      <name>mod_ssl</name>
+      <repository>OS</repository>
+    </litp:package-def>
+    <litp:package-def id="sso_pa_pkg">
+      <ensure>installed</ensure>
+      <name>ERICssoapa_CXP9023491</name>
+      <repository/>
+      <version>%{Version}</version>
+    </litp:package-def>
+  </litp:component-def>
+</tor_sw>

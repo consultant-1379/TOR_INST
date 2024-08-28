@@ -1,0 +1,17 @@
+   <litp:component-def id="sfs_client">
+    <litp:nas-client-def id="sfs_share_cluster">
+      <mountpoint>/cluster</mountpoint>
+    </litp:nas-client-def>
+    <litp:nas-client-def id="sfs_share_logstash">
+      <mountpoint>/ericsson/tor/logstash</mountpoint>
+    </litp:nas-client-def>
+    <litp:nas-client-def id="sfs_share_segment1">
+      <mountpoint>/var/opt/ericsson/nms_umts_pms_seg/segment1</mountpoint>
+    </litp:nas-client-def>
+    <litp:nas-client-def id="sfs_share_tor_data">
+      <mountpoint>/ericsson/tor/data</mountpoint>
+    </litp:nas-client-def>
+    <litp:nas-client-def id="sfs_share_tor_no_rollback">
+      <mountpoint>/ericsson/tor/no_rollback</mountpoint>
+    </litp:nas-client-def>
+  </litp:component-def>

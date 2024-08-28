@@ -1,0 +1,25 @@
+<litp:component-def id="logrotate_litp">
+    <!-- rules to rotate litp related logs on ms1 -->
+    <litp:logrotate-def id="litp">
+        <compress>true</compress>
+        <create>false</create>
+        <dateext>true</dateext>
+        <dateformat>-%Y%m%d-%s</dateformat>
+        <delaycompress>true</delaycompress>
+        <name>litp</name>
+        <path>/var/log/litp.log /var/log/litp/*.log</path>
+        <postrotate>service rsyslog restart || true</postrotate>
+        <rotate>6</rotate>
+        <sharedscripts>true</sharedscripts>
+        <size>50M</size>
+    </litp:logrotate-def>
+    <litp:logrotate-def id="savefiles">
+        <compress>true</compress>
+        <dateext>true</dateext>
+        <dateformat>-%Y%m%d-%s</dateformat>
+        <name>savefiles</name>
+        <path>/var/lib/landscape/*.json</path>
+        <rotate>6</rotate>
+        <rotate_every>day</rotate_every>
+    </litp:logrotate-def>
+</litp:component-def>

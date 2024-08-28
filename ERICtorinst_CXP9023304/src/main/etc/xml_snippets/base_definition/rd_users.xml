@@ -1,0 +1,62 @@
+  <litp:component-def id="rd_users">
+    <litp:group-def id="group_litp_jboss">
+      <gid>205</gid>
+      <name>litp_jboss</name>
+    </litp:group-def>
+    <litp:group-def id="group_litp_user">
+      <gid>481</gid>
+      <name>litp_user</name>
+    </litp:group-def>
+    <litp:group-def id="group_storage">
+      <gid>483</gid>
+      <name>storage</name>
+    </litp:group-def>
+    <litp:user-def id="litp_admin">
+      <gid>205</gid>
+      <home>/users/litp_admin</home>
+      <name>litp_admin</name>
+      <seluser>unconfined_u</seluser>
+      <uid>480</uid>
+      <umask>022</umask>
+    </litp:user-def>
+    <litp:user-def id="litp_jboss">
+      <gid>205</gid>
+      <home>/users/litp_jboss</home>
+      <name>litp_jboss</name>
+      <seluser>unconfined_u</seluser>
+      <uid>308</uid>
+      <umask>022</umask>
+    </litp:user-def>
+    <litp:user-def id="litp_user">
+      <gid>481</gid>
+      <home>/users/litp_user</home>
+      <name>litp_user</name>
+      <seluser>user_u</seluser>
+      <uid>481</uid>
+      <umask>022</umask>
+    </litp:user-def>
+    <litp:user-def id="logstash_user">
+      <gid>205</gid>
+      <home>/users/logstash_user</home>
+      <name>logstash_user</name>
+      <seluser>unconfined_u</seluser>
+      <uid>310</uid>
+      <umask>022</umask>
+    </litp:user-def>
+    <litp:user-def id="storadm">
+      <gid>483</gid>
+      <home>/opt/ericsson/storage/user/nas/storadm</home>
+	  <lang>C</lang>
+      <name>storadm</name>
+      <uid>490</uid>
+      <umask>022</umask>
+    </litp:user-def>
+    <litp:user-def id="storobs">
+      <gid>483</gid>
+      <home>/opt/ericsson/storage/user/nas/storobs</home>
+      <name>storobs</name>
+      <uid>491</uid>
+      <umask>022</umask>
+    </litp:user-def>
+  </litp:component-def>
+

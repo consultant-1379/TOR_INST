@@ -1,0 +1,91 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson LMI                                    SCRIPT
+# ********************************************************************
+#
+# (c) Ericsson LMI 2013 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson LMI. The programs may be used
+# and/or copied only with the written permission from Ericsson LMI or in accordance with
+# the terms and conditions stipulated in the agreement/contract under which the program(s)
+# have been supplied.
+#
+# ********************************************************************
+# Name    : amf_status.bsh
+# Date    : 17/07/2012
+# Revision: R1A01
+# Purpose : TOR Service AMF Status Script
+#
+# Usage   : Execute on LMS
+#
+# ********************************************************************
+
+DIRNAME=/usr/bin/dirname
+GETOPT=/usr/bin/getopt
+ECHO=/bin/echo
+PYTHON=/usr/bin/python
+SERVICE=/sbin/service
+
+### Function: get_absolute_path ###
+#
+# Determine absolute path to software
+#
+# Arguments:
+#   none
+# Return Values:
+#   none
+get_absolute_path()
+{
+  _dir_=`${DIRNAME} $0`
+  SCRIPT_HOME=`cd ${_dir_}/../ 2>/dev/null && pwd || ${ECHO} ${_dir_}`
+  export PYTHONPATH=${PYTHONPATH}:${SCRIPT_HOME}/lib
+}
+
+get_absolute_path
+_landscape_host_="--landscape_host localhost"
+if [ $# -eq 0 ] ; then
+  _sg_=""
+  _au_=""
+  _ap_=""
+else
+  # Execute getopt
+  _args_=`${GETOPT} -o "l:,s:,u:,p:" -l "landscape_host:,sg:,au:,ap:" -n "$0" -- "$@"`
+  #Bad arguments
+  if [ $? -ne 0 ] ; then
+    usage
+    exit 2
+  fi
+  # A little magic
+  eval set -- "${_args_}"
+  while true ; do
+    case "$1" in
+      -l | --landscape_host)
+        _landscape_host_="--landscape_host $2"
+        shift 2
+        ;;
+      -s | --sg)
+        _sg_="--sg $2"
+        shift 2
+        ;;
+      -u | --au)
+        _au_="--au $2"
+        shift 2
+        ;;
+      -p | --ap)
+        _ap_="--ap $2"
+        shift 2
+        ;;
+      --)
+        shift
+        break;;
+    esac
+  done
+fi
+${SERVICE} landscaped status > /dev/null 2>&1
+if [ $? -ne 0 ] ; then
+  ${ECHO} "service 'landscaped' is not online"
+  exit 1
+fi
+${PYTHON} ${SCRIPT_HOME}/lib/litp/service_status.py ${_landscape_host_} ${_sg_} ${_au_} ${_ap_}
+exit $?

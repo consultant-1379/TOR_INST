@@ -1,0 +1,19 @@
+#!/bin/bash
+
+DIRNAME=/usr/bin/dirname
+ECHO=/bin/echo
+PYTHON=/usr/bin/python
+
+setup_env()
+{
+  local _dir_=`${DIRNAME} $0`
+  export SCRIPT_HOME=`cd ${_dir_}/../../ 2>/dev/null && pwd || ${ECHO} ${_dir_}`
+  export PYTHONPATH=${PYTHONPATH}:${SCRIPT_HOME}/lib
+	HCJBOSSPY=${SCRIPT_HOME}/lib/jboss/hc_jboss.py
+}
+
+setup_env
+${PYTHON} ${HCJBOSSPY} ${*}
+exit $?
+
+

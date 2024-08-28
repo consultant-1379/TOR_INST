@@ -1,0 +1,98 @@
+### Common Variables for TOR System Utility Package ###
+
+### Core Linux tools ###
+
+AWK=/bin/awk
+CAT=/bin/cat
+CP=/bin/cp
+CUT=/bin/cut
+DATE=/bin/date
+ECHO=/bin/echo
+EGREP=/bin/egrep
+GETOPT=/usr/bin/getopt
+GREP=/bin/grep
+HEAD=/usr/bin/head
+LITP=/usr/bin/litp
+MKDIR=/bin/mkdir
+MV=/bin/mv
+LESS=/bin/less
+LS=/bin/ls
+PYTHON=/usr/bin/python
+RM=/bin/rm
+SED=/bin/sed
+SERVICE=/sbin/service
+SSH=/usr/bin/ssh
+TAIL=/usr/bin/tail
+YUM=/usr/bin/yum
+WATCH=/usr/bin/watch
+WC=/usr/bin/wc
+
+
+
+### Options for Core Linux tools ###
+
+SSH_NO_CHECKING="-o StrictHostKeyChecking=no"
+
+
+
+### define colors for terminal messages ###
+normal_text=$(tput sgr0)
+red_text=$(tput setaf 1)
+green_text=$(tput setaf 2)
+yellow_text=$(tput setaf 3)
+blue_text=$(tput setaf 4)
+pink_text=$(tput setaf 5)
+cyan_text=$(tput setaf 6)
+white_text=$(tput setaf 7)
+bold_text=$(tput bold)
+
+
+### System Software ###
+AMFADM=/usr/bin/amf-adm
+AMFSTATE=/usr/bin/amf-state
+DPSUTIL=/opt/ericsson/com.ericsson.oss.itpf.datalayer.datapersist/utilities/bin/DPSUtil.sh
+PIB_HC=/opt/ericsson/PlatformIntegrationBridge/etc/healthcheck.py
+PIB_CONFIG=/opt/ericsson/PlatformIntegrationBridge/etc/config.py
+HC_JBOSS=/opt/ericsson/torinst/etc/healthCheck/hc_jboss.bsh
+SMTOOL=/opt/ericsson/nms_cif_sm/bin/smtool
+
+
+### TOR Specific ###
+LITP=/usr/bin/litp
+PEER_NODE1=sc-1
+PEER_NODE2=sc-2
+MS=ms-1
+JBOSS_INSTANCES=(FMPMServ MSFM MSPM0 MSPM1 MedCore UIServ SSO )
+MASTERSERVICE=masterservice
+
+
+### FM & PM Consumer Queue ###
+MED_SERVICE="--service_identifier=mediationservice"
+FM_SU0_OPTION="--app_server_identifier=MSFM_su_0_jee_instance"
+FM_SU1_OPTION="--app_server_identifier=MSFM_su_1_jee_instance"
+PM0_SU0_OPTION="--app_server_identifier=MSPM0_su_0_jee_instance"
+PM0_SU1_OPTION="--app_server_identifier=MSPM0_su_1_jee_instance"
+PM1_SU0_OPTION="--app_server_identifier=MSPM1_su_0_jee_instance"
+PM1_SU1_OPTION="--app_server_identifier=MSPM1_su_1_jee_instance"
+FM_CONSUMER_QUEUE_0="FmMediationServiceConsumer_0"
+FM_CONSUMER_QUEUE_1="FmMediationServiceConsumer_1"
+CONSUMER_QUEUE_OPTION="--name=mediation_service_consumer_channelId"
+MED_PROTOCOL_OPTION="--name=med_service_protocol_info"
+
+
+
+### PM file colllection ###
+FTH_SCRIPT="/opt/ericsson/ftpm/bin/start_file_handler.sh"
+JBOSS_PROPERTIES="/var/opt/ericsson/ftpm/data/jboss-ejb-client.properties"
+DEFAULT_CONNECTION="remote.connection.default"
+NUM_CONNECTION=10
+SEGMENT1_PATH=/var/opt/ericsson/nms_umts_pms_seg/segment1/XML/
+NUM_ROPS=5
+
+
+
+### Dynamic ###
+LOCK_TIMEOUT=20
+UNLOCK_TIMEOUT=30
+EXPECTED_PIB_RESULT=32
+TIMEOUT=600 ### 10mins 

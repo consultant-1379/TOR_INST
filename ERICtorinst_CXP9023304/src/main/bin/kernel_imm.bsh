@@ -1,0 +1,28 @@
+#!/bin/bash
+
+rmem_def=100000000
+pup_man=/opt/ericsson/nms/litp/etc/puppet/modules/litpuser/manifests/sysctl.pp
+DIRNAME=/usr/bin/dirname
+
+_dir_=`${DIRNAME} $0`
+SCRIPT_HOME=`cd ${_dir_}/../ 2>/dev/null && pwd || ${ECHO} ${_dir_}`
+
+_cfl_=${SCRIPT_HOME}/bin/common_functions.lib
+if [ ! -f ${_cfl_} ] ; then
+  ${ECHO} "Cant find ${_cfl_}"
+  exit 1
+else
+  . ${_cfl_}
+fi
+log "Updating puppet manifect to make changes persistent."
+sed -i "s/.*net.core.rmem_default.*/    line    => \'net.core.rmem_default = ${rmem_def}\',/g" ${pup_man}
+
+_sysctl_update net.core.rmem_default ${rmem_def}
+
+log "Implementing timeout changes in SAF"
+ssh sc-1 'immcfg -a smfRebootTimeout=2100000000000 smfConfig=1,safApp=safSmfService'
+ssh sc-1 'immcfg -a smfAdminOpTimeout=1800000000000 smfConfig=1,safApp=safSmfService'
+ssh sc-1 'amf-adm si-swap safSi=SC-2N,safApp=OpenSAF'
+ssh sc-2 'immcfg -a smfRebootTimeout=2100000000000 smfConfig=1,safApp=safSmfService'
+ssh sc-2 'immcfg -a smfAdminOpTimeout=1800000000000 smfConfig=1,safApp=safSmfService'
+log "Script has completed successfully!"

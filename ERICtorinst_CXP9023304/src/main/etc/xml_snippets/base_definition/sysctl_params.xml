@@ -1,0 +1,7 @@
+<litp:component-def id="sysctl_params">
+    <name>sysctl_params</name>
+    <litp:sysctl-def id="net_core_rmem_default">
+    	<name>net.core.rmem_default</name>
+    	<value>100000000</value>
+	</litp:sysctl-def>
+</litp:component-def>
